@@ -32,9 +32,9 @@ jobs:
       - name: Create www directory with index.html
         run: |
           mkdir -p www
-          cp UAK-Control/uak.html www/index.html
-          cp -r UAK-Control/icons www/icons 2>/dev/null || true
-          cp UAK-Control/manifest.json www/manifest.json 2>/dev/null || true
+          cp uak.html www/index.html
+          cp -r icons www/icons 2>/dev/null || true
+          cp manifest.json www/manifest.json 2>/dev/null || true
 
       - name: Init Capacitor config
         run: |
