@@ -137,16 +137,26 @@ jobs:
             img = src.resize((size, size), Image.LANCZOS)
             img.save(f'{path}/ic_launcher.png')
             img.save(f'{path}/ic_launcher_round.png')
-            img.save(f'{path}/ic_launcher_foreground.png')
-            bg = Image.new('RGBA', (size, size), (28, 28, 28, 255))
-            bg.save(f'{path}/ic_launcher_background.png')
+            for fname in ['ic_launcher.xml', 'ic_launcher_round.xml',
+                          'ic_launcher_foreground.png', 'ic_launcher_background.png']:
+              fpath = f'{path}/{fname}'
+              if os.path.exists(fpath):
+                os.remove(fpath)
             print(f'{folder}: {size}x{size} OK')
 
-          # Odstran adaptive icon XML ktore prepisuju nase PNG ikony
           anydpi = f'{base}/mipmap-anydpi-v26'
           if os.path.exists(anydpi):
             shutil.rmtree(anydpi)
             print('Removed mipmap-anydpi-v26')
+
+          for d in os.listdir(base):
+            if 'drawable' in d:
+              for fname in ['ic_launcher.xml', 'ic_launcher_foreground.xml',
+                            'ic_launcher_background.xml', 'ic_launcher_round.xml']:
+                fpath = f'{base}/{d}/{fname}'
+                if os.path.exists(fpath):
+                  os.remove(fpath)
+                  print(f'Removed {fpath}')
           EOF
 
       - name: Build APK
