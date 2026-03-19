@@ -1,0 +1,26 @@
+{
+  "name": "UAK Control",
+  "short_name": "UAK",
+  "description": "USB Army Knife Controller",
+  "start_url": "/UAK-Control/uak.html",
+  "scope": "/UAK-Control/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1c1c1c",
+  "theme_color": "#1c1c1c",
+  "categories": ["utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
