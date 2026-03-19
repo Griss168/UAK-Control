@@ -61,28 +61,9 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Enable cleartext and mixed content in AndroidManifest
+      - name: Enable cleartext in AndroidManifest
         run: |
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-
-      - name: Patch MainActivity to allow HTTP
-        run: |
-          cat > android/app/src/main/java/com/uak/control/MainActivity.java << 'EOF'
-          package com.uak.control;
-          import android.os.Bundle;
-          import android.webkit.WebSettings;
-          import android.webkit.WebView;
-          import com.getcapacitor.BridgeActivity;
-          public class MainActivity extends BridgeActivity {
-            @Override
-            public void onCreate(Bundle savedInstanceState) {
-              super.onCreate(savedInstanceState);
-              WebView webView = getBridge().getWebView();
-              WebSettings settings = webView.getSettings();
-              settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-            }
-          }
-          EOF
 
       - name: Create network security config
         run: |
@@ -106,6 +87,25 @@ jobs:
         run: |
           sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml\/network_security_config"/' android/app/src/main/AndroidManifest.xml
 
+      - name: Patch MainActivity to allow HTTP
+        run: |
+          cat > android/app/src/main/java/com/uak/control/MainActivity.java << 'EOF'
+          package com.uak.control;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              WebView webView = getBridge().getWebView();
+              WebSettings settings = webView.getSettings();
+              settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            }
+          }
+          EOF
+
       - name: Sync Capacitor
         run: npx cap sync android
 
@@ -114,7 +114,7 @@ jobs:
           pip install Pillow -q
           python3 << 'EOF'
           from PIL import Image
-          import os
+          import os, shutil
 
           sizes = {
             'mipmap-mdpi': 48,
@@ -133,11 +133,17 @@ jobs:
             img = src.resize((size, size), Image.LANCZOS)
             img.save(f'{path}/ic_launcher.png')
             img.save(f'{path}/ic_launcher_round.png')
+            img.save(f'{path}/ic_launcher_foreground.png')
+            bg = Image.new('RGBA', (size, size), (28, 28, 28, 255))
+            bg.save(f'{path}/ic_launcher_background.png')
             print(f'{folder}: {size}x{size} OK')
+
+          # Odstran adaptive icon XML ktore prepisuju nase PNG ikony
+          anydpi = f'{base}/mipmap-anydpi-v26'
+          if os.path.exists(anydpi):
+            shutil.rmtree(anydpi)
+            print('Removed mipmap-anydpi-v26')
           EOF
-        
-      - name: Check AndroidManifest
-        run: cat android/app/src/main/AndroidManifest.xml
 
       - name: Build APK
         run: |
