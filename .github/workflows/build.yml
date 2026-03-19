@@ -48,9 +48,12 @@ jobs:
               "allowNavigation": ["*"]
             },
             "android": {
-              "allowMixedContent": true,
-              "captureInput": true,
-              "webContentsDebuggingEnabled": true
+              "allowMixedContent": true
+            },
+            "plugins": {
+              "CapacitorHttp": {
+                "enabled": true
+              }
             }
           }
           EOF
