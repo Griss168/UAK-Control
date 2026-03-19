@@ -45,10 +45,12 @@ jobs:
             "webDir": "www",
             "server": {
               "cleartext": true,
-              "allowNavigation": ["4.3.2.1"]
+              "allowNavigation": ["*"]
             },
             "android": {
-              "allowMixedContent": true
+              "allowMixedContent": true,
+              "captureInput": true,
+              "webContentsDebuggingEnabled": true
             }
           }
           EOF
@@ -59,6 +61,25 @@ jobs:
       - name: Enable cleartext and mixed content in AndroidManifest
         run: |
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Patch MainActivity to allow HTTP
+        run: |
+          cat > android/app/src/main/java/com/uak/control/MainActivity.java << 'EOF'
+          package com.uak.control;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import com.getcapacitor.BridgeActivity;
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              WebView webView = getBridge().getWebView();
+              WebSettings settings = webView.getSettings();
+              settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            }
+          }
+          EOF
 
       - name: Create network security config
         run: |
