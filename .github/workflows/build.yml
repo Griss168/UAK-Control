@@ -32,7 +32,7 @@ jobs:
       - name: Create www directory with index.html
         run: |
           mkdir -p www
-          cp UAK-Control/index.html www/index.html
+          cp UAK-Control/uak.html www/index.html
           cp -r UAK-Control/icons www/icons 2>/dev/null || true
           cp UAK-Control/manifest.json www/manifest.json 2>/dev/null || true
 
