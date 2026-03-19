@@ -60,6 +60,28 @@ jobs:
         run: |
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
 
+      - name: Create network security config
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cat > android/app/src/main/res/xml/network_security_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+            <base-config cleartextTrafficPermitted="true">
+              <trust-anchors>
+                <certificates src="system"/>
+                <certificates src="user"/>
+              </trust-anchors>
+            </base-config>
+            <domain-config cleartextTrafficPermitted="true">
+              <domain includeSubdomains="true">4.3.2.1</domain>
+            </domain-config>
+          </network-security-config>
+          EOF
+
+      - name: Link network security config in AndroidManifest
+        run: |
+          sed -i 's/android:usesCleartextTraffic="true"/android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml\/network_security_config"/' android/app/src/main/AndroidManifest.xml
+
       - name: Sync Capacitor
         run: npx cap sync android
         
