@@ -1,0 +1,75 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Create www directory with index.html
+        run: |
+          mkdir -p www
+          cp UAK-Control/index.html www/index.html
+          cp -r UAK-Control/icons www/icons 2>/dev/null || true
+          cp UAK-Control/manifest.json www/manifest.json 2>/dev/null || true
+
+      - name: Init Capacitor config
+        run: |
+          cat > capacitor.config.json << 'EOF'
+          {
+            "appId": "com.uak.control",
+            "appName": "UAK Control",
+            "webDir": "www",
+            "server": {
+              "cleartext": true,
+              "allowNavigation": ["4.3.2.1"]
+            },
+            "android": {
+              "allowMixedContent": true
+            }
+          }
+          EOF
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Enable cleartext and mixed content in AndroidManifest
+        run: |
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uak-control-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
