@@ -36,32 +36,6 @@ jobs:
           cp -r icons www/icons 2>/dev/null || true
           cp manifest.json www/manifest.json 2>/dev/null || true
 
-      - name: Set app icons
-        run: |
-          pip install Pillow -q
-          python3 << 'EOF'
-          from PIL import Image
-          import os
-
-          sizes = {
-            'mipmap-mdpi': 48,
-            'mipmap-hdpi': 72,
-            'mipmap-xhdpi': 96,
-            'mipmap-xxhdpi': 144,
-            'mipmap-xxxhdpi': 192,
-          }
-
-          src = Image.open('icons/icon-512.png').convert('RGBA')
-          base = 'android/app/src/main/res'
-
-          for folder, size in sizes.items():
-            path = f'{base}/{folder}'
-            os.makedirs(path, exist_ok=True)
-            img = src.resize((size, size), Image.LANCZOS)
-            img.save(f'{path}/ic_launcher.png')
-            img.save(f'{path}/ic_launcher_round.png')
-            print(f'{folder}: {size}x{size} OK')
-          EOF
       - name: Init Capacitor config
         run: |
           cat > capacitor.config.json << 'EOF'
@@ -134,6 +108,33 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Set app icons
+        run: |
+          pip install Pillow -q
+          python3 << 'EOF'
+          from PIL import Image
+          import os
+
+          sizes = {
+            'mipmap-mdpi': 48,
+            'mipmap-hdpi': 72,
+            'mipmap-xhdpi': 96,
+            'mipmap-xxhdpi': 144,
+            'mipmap-xxxhdpi': 192,
+          }
+
+          src = Image.open('icons/icon-512.png').convert('RGBA')
+          base = 'android/app/src/main/res'
+
+          for folder, size in sizes.items():
+            path = f'{base}/{folder}'
+            os.makedirs(path, exist_ok=True)
+            img = src.resize((size, size), Image.LANCZOS)
+            img.save(f'{path}/ic_launcher.png')
+            img.save(f'{path}/ic_launcher_round.png')
+            print(f'{folder}: {size}x{size} OK')
+          EOF
         
       - name: Check AndroidManifest
         run: cat android/app/src/main/AndroidManifest.xml
