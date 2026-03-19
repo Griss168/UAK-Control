@@ -38,22 +38,30 @@ jobs:
 
       - name: Set app icons
         run: |
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-mdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          convert icons/icon-512.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert icons/icon-512.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
-          convert icons/icon-512.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          convert icons/icon-512.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
-          convert icons/icon-512.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert icons/icon-512.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
-          convert icons/icon-512.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert icons/icon-512.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
-          convert icons/icon-512.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          convert icons/icon-512.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          pip install Pillow -q
+          python3 << 'EOF'
+          from PIL import Image
+          import os
 
+          sizes = {
+            'mipmap-mdpi': 48,
+            'mipmap-hdpi': 72,
+            'mipmap-xhdpi': 96,
+            'mipmap-xxhdpi': 144,
+            'mipmap-xxxhdpi': 192,
+          }
+
+          src = Image.open('icons/icon-512.png').convert('RGBA')
+          base = 'android/app/src/main/res'
+
+          for folder, size in sizes.items():
+            path = f'{base}/{folder}'
+            os.makedirs(path, exist_ok=True)
+            img = src.resize((size, size), Image.LANCZOS)
+            img.save(f'{path}/ic_launcher.png')
+            img.save(f'{path}/ic_launcher_round.png')
+            print(f'{folder}: {size}x{size} OK')
+          EOF
       - name: Init Capacitor config
         run: |
           cat > capacitor.config.json << 'EOF'
