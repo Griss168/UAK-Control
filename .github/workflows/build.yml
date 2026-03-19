@@ -62,6 +62,9 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+        
+      - name: Check AndroidManifest
+        run: cat android/app/src/main/AndroidManifest.xml
 
       - name: Build APK
         run: |
