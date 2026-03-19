@@ -654,6 +654,7 @@ self.addEventListener('fetch', e => {
 </script>
 </head>
 <body>
+<div id="debug" style="position:fixed;top:0;left:0;background:red;color:white;z-index:9999;font-size:12px;padding:4px;"></div>
 
 <!-- STATUS BAR -->
 <div class="status-bar">
@@ -825,6 +826,9 @@ let state = {
   deletingScriptId: null,
   checkInterval: null
 };
+
+document.getElementById('debug').textContent = 'HOST: ' + state.host;
+
 
 // ════════════════════════════════
 // KEYBOARD / VIEWPORT FIX
