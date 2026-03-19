@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1c1c1c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="UAK Control">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="UAK Control">
+<meta name="description" content="USB Army Knife Controller">
+<title>UAK Control</title>
+<link rel="manifest" href="/UAK-Control/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #1c1c1c;
+    --bg-secondary: #242424;
+    --bg-card: #2a2a2a;
+    --bg-elevated: #333333;
+    --border: #424242;
+    --border-subtle: #363636;
+    --text-primary: #f8f8f8;
+    --text-secondary: #c0c0c0;
+    --text-muted: #808080;
+    --accent: #00e5a0;
+    --accent-dim: rgba(0, 229, 160, 0.15);
+    --accent-mid: rgba(0, 229, 160, 0.28);
+    --danger: #ff4757;
+    --danger-dim: rgba(255, 71, 87, 0.15);
+    --warning: #ffa502;
+    --warning-dim: rgba(255, 165, 2, 0.15);
+    --connected: #00e5a0;
+    --disconnected: #ff4757;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(20px);
+  }
+
+  .app-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--text-primary);
+    text-transform: uppercase;
+  }
+
+  .connection-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+  .connection-pill.connected {
+    background: var(--accent-dim);
+    border: 1px solid rgba(0, 229, 160, 0.3);
+    color: var(--accent);
+  }
+  .connection-pill.disconnected {
+    background: var(--danger-dim);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+    color: var(--danger);
+  }
+  .connection-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: none;
+  }
+  .connection-pill.connected .dot { animation: pulse 2s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .host-edit { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+  /* ── TABS ── */
+  .tab-nav {
+    display: flex;
+    padding: 12px 16px 0;
+    gap: 4px;
+    background: var(--bg-primary);
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active {
+    background: var(--bg-card);
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+  }
+  .tab-btn i { display: block; font-size: 16px; margin-bottom: 3px; }
+
+  /* ── CONTENT ── */
+  .tab-content { padding: 16px; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* ── QUICK ACCESS ── */
+  .quick-access {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .quick-access::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .quick-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .quick-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .quick-name.empty { color: var(--text-muted); font-style: italic; font-weight: 400; }
+  .btn-send {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-send:active { transform: scale(0.97); background: #00c88a; }
+  .btn-send:disabled { background: var(--bg-elevated); color: var(--text-muted); cursor: not-allowed; }
+
+  /* ── SECTION HEADER ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .section-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .btn-icon {
+    width: 32px; height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+  }
+  .btn-icon:active { background: var(--bg-card); color: var(--accent); }
+
+  /* ── LIST ── */
+  .item-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .list-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .list-item:active { border-color: var(--accent); background: var(--bg-elevated); }
+  .list-item.sending { border-color: var(--accent); }
+  .list-item.success { border-color: var(--accent); }
+  .list-item.error { border-color: var(--danger); }
+
+  .list-item .item-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .list-item:active .item-icon { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .btn-action {
+    width: 30px; height: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .btn-action:active { transform: scale(0.9); }
+  .btn-action.danger:active { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+  .btn-action.primary:active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+  /* FEEDBACK OVERLAY */
+  .item-feedback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    gap: 6px;
+  }
+  .item-feedback.success { background: rgba(0,229,160,0.15); color: var(--accent); }
+  .item-feedback.error { background: rgba(255,71,87,0.15); color: var(--danger); }
+  .item-feedback.visible { opacity: 1; pointer-events: all; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-muted);
+  }
+  .empty-state i { font-size: 36px; margin-bottom: 12px; display: block; opacity: 0.4; }
+  .empty-state p { font-size: 13px; margin: 0; }
+
+  /* ── MODAL ── */
+  .modal-backdrop-custom {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    transition: bottom 0.25s ease;
+  }
+  .modal-backdrop-custom.show { display: flex; }
+
+  .modal-sheet {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 24px 20px 40px;
+    animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-height: 85dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    margin: 0 auto 20px;
+  }
+
+  .sheet-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+  }
+
+  .form-label-custom {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .form-control-custom {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 16px;
+  }
+  .form-control-custom:focus { border-color: var(--accent); }
+  .form-control-custom::placeholder { color: var(--text-muted); }
+
+  textarea.form-control-custom {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .btn-sheet-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: all 0.15s;
+  }
+  .btn-sheet-primary:active { transform: scale(0.98); }
+
+  .btn-sheet-secondary {
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-sheet-secondary:active { background: var(--bg-elevated); }
+
+  .btn-sheet-danger {
+    width: 100%;
+    padding: 14px;
+    background: var(--danger-dim);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    color: var(--danger);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: all 0.15s;
+  }
+  .btn-sheet-danger:active { transform: scale(0.98); background: rgba(255,71,87,0.2); }
+
+  /* ── TOAST ── */
+  .toast-container {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: calc(100% - 32px);
+    max-width: 400px;
+    pointer-events: none;
+  }
+
+  .toast-item {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: toastIn 0.3s ease;
+    border: 1px solid;
+  }
+  .toast-item.success { background: rgba(0,229,160,0.15); border-color: rgba(0,229,160,0.4); color: var(--accent); }
+  .toast-item.error { background: rgba(255,71,87,0.15); border-color: rgba(255,71,87,0.4); color: var(--danger); }
+  .toast-item.info { background: rgba(255,165,2,0.1); border-color: rgba(255,165,2,0.3); color: var(--warning); }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── HOST EDITOR ── */
+  .host-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .host-input {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    outline: none;
+  }
+  .host-input:focus { border-color: var(--accent); }
+  .btn-host-save {
+    padding: 6px 12px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* ── SCRIPTS TAB SPECIFIC ── */
+  .script-item .item-icon { color: var(--warning); }
+  .btn-run {
+    padding: 6px 14px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,229,160,0.3);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-run:active { background: var(--accent-mid); }
+
+  /* ── IMPORT/EXPORT BUTTONS ── */
+  .io-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .btn-io {
+    flex: 1;
+    padding: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+  }
+  .btn-io:active { border-color: var(--accent); color: var(--accent); }
+
+  /* ── SCROLLABLE CONTENT ── */
+  .scroll-content {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* RUNNING INDICATOR */
+  .running-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--warning-dim);
+    border: 1px solid rgba(255,165,2,0.3);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--warning);
+    animation: pulse 1s infinite;
+  }
+
+  /* ── NO SCROLL BAR ── */
+  ::-webkit-scrollbar { display: none; }
+
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
+<script>
+// ── SERVICE WORKER pre offline funkčnosť ──
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'uak-v1';
+const URLS = [location.href];
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(URLS)).then(() => self.skipWaiting())
+  );
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(self.clients.claim());
+});
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  // HTML stránku vždy servi z cache, API requesty vždy zo siete
+  if (url.pathname.endsWith('.html') || url.pathname === '/') {
+    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+  }
+  // Fonty a bootstrap cachuj
+  else if (url.hostname !== '4.3.2.1') {
+    e.respondWith(
+      caches.open(CACHE).then(c =>
+        c.match(e.request).then(r => r || fetch(e.request).then(res => {
+          c.put(e.request, res.clone()); return res;
+        }))
+      )
+    );
+  }
+  // UAK API - vždy sieť
+  else {
+    e.respondWith(fetch(e.request));
+  }
+});
+  `;
+  const blob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, {scope: '/'}).catch(() => {});
+}
+</script>
+</head>
+<body>
+
+<!-- TEST BUTTON -->
+<button onclick="testFetch()" style="position:fixed;bottom:10px;left:10px;z-index:9999;background:red;color:white;padding:10px;border:none;border-radius:8px;font-size:14px;">TEST HTTP</button>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <span class="app-title"><i class="bi bi-usb-symbol me-1"></i>UAK Control</span>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button id="installBtn" onclick="triggerInstall()" style="display:none;align-items:center;gap:5px;padding:5px 10px;background:var(--accent-dim);border:1px solid rgba(0,229,160,0.3);border-radius:999px;color:var(--accent);font-family:var(--font-mono);font-size:11px;font-weight:600;cursor:pointer;">
+      <i class="bi bi-download"></i> INSTALL
+    </button>
+    <span class="host-edit" id="hostDisplay" onclick="toggleHostEdit()" style="cursor:pointer;text-decoration:underline dotted;"></span>
+    <div class="connection-pill disconnected" id="connPill" onclick="checkConnection()">
+      <span class="dot"></span>
+      <span id="connText">OFFLINE</span>
+    </div>
+  </div>
+</div>
+
+<!-- HOST EDITOR (hidden by default) -->
+<div class="host-row" id="hostRow" style="display:none;">
+  <input type="text" class="host-input" id="hostInput" placeholder="http://4.3.2.1:8080" />
+  <button class="btn-host-save" onclick="saveHost()">ULOŽIŤ</button>
+</div>
+
+<!-- TABS -->
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('passwords')" id="tab-passwords">
+    <i class="bi bi-key"></i>HESLÁ
+  </button>
+  <button class="tab-btn" onclick="switchTab('scripts')" id="tab-scripts">
+    <i class="bi bi-file-code"></i>SKRIPTY
+  </button>
+</div>
+
+<!-- ════════ PASSWORDS TAB ════════ -->
+<div class="tab-content">
+<div class="tab-pane active scroll-content" id="pane-passwords">
+
+  <!-- Quick Access -->
+  <div class="quick-access" id="quickAccess">
+    <div class="quick-label"><i class="bi bi-lightning-charge me-1"></i>Rýchla voľba</div>
+    <div class="quick-name empty" id="quickName">Žiadne heslo nie je vybrané</div>
+    <button class="btn-send" id="quickSendBtn" onclick="sendQuick()" disabled>
+      <i class="bi bi-send"></i> ODOSLAŤ CEZ HID
+    </button>
+  </div>
+
+  <!-- Password List -->
+  <div class="section-header">
+    <span class="section-title">Zoznam hesiel</span>
+    <button class="btn-icon" onclick="openAddPassword()" title="Pridať heslo">
+      <i class="bi bi-plus-lg"></i>
+    </button>
+  </div>
+
+  <div class="item-list" id="passwordList">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- Import/Export at bottom -->
+  <div class="io-row" style="margin-top:20px;">
+    <button class="btn-io" onclick="exportPasswords()"><i class="bi bi-download"></i>EXPORT</button>
+    <button class="btn-io" onclick="triggerImport()"><i class="bi bi-upload"></i>IMPORT</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importPasswords(event)">
+  </div>
+
+</div>
+
+<!-- ════════ SCRIPTS TAB ════════ -->
+<div class="tab-pane" id="pane-scripts">
+
+  <div class="section-header">
+    <div>
+      <span class="section-title">DuckyScripts</span>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px;font-family:var(--font-mono);">/DuckyScripts/</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn-icon" onclick="loadScriptsFromSD()" title="Načítať zo SD karty" id="btnRefreshScripts">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button class="btn-icon" onclick="triggerUploadScript()" title="Nahrať skripty na SD">
+        <i class="bi bi-cloud-upload"></i>
+      </button>
+      <input type="file" id="uploadScriptFile" accept=".ds,.txt" multiple style="display:none" onchange="uploadScripts(event)">
+    </div>
+  </div>
+
+  <div id="scriptsLoading" style="display:none;text-align:center;padding:24px;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">
+    <div class="spinner-border spinner-border-sm text-success mb-2" role="status"></div>
+    <div>Načítavam zo SD karty...</div>
+  </div>
+
+  <div class="item-list" id="scriptList"></div>
+
+  <!-- Script IO at bottom -->
+  <div class="io-row" style="margin-top:20px;" id="scriptIORow">
+    <button class="btn-io" onclick="triggerUploadScript()"><i class="bi bi-cloud-upload"></i>NAHRAŤ NA SD</button>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════ TOAST CONTAINER ════════ -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ════════ MODALS ════════ -->
+
+<!-- Add/Edit Password Modal -->
+<div class="modal-backdrop-custom" id="modalPassword" onclick="closeModalOnBackdrop(event,'modalPassword')">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="pwModalTitle">Pridať heslo</div>
+    <label class="form-label-custom">Názov / popis</label>
+    <input type="text" class="form-control-custom" id="pwName" placeholder="napr. Gmail, Work VPN...">
+    <label class="form-label-custom">Heslo</label>
+    <input type="text" class="form-control-custom" id="pwValue" placeholder="Samotné heslo...">
+    <button class="btn-sheet-primary" onclick="savePassword()">ULOŽIŤ</button>
+    <button class="btn-sheet-secondary" onclick="closeModal('modalPassword')">ZRUŠIŤ</button>
+  </div>
+</div>
+
+<!-- Delete Password Confirm -->
+<div class="modal-backdrop-custom" id="modalDeletePw" onclick="closeModalOnBackdrop(event,'modalDeletePw')">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Vymazať heslo</div>
+    <p style="color:var(--text-secondary);font-size:14px;margin-bottom:20px;">
+      Naozaj chceš vymazať heslo <strong id="deletePwName" style="color:var(--text-primary)"></strong>?
+    </p>
+    <button class="btn-sheet-danger" onclick="confirmDeletePassword()"><i class="bi bi-trash me-2"></i>VYMAZAŤ</button>
+    <button class="btn-sheet-secondary" onclick="closeModal('modalDeletePw')">ZRUŠIŤ</button>
+  </div>
+</div>
+
+<!-- Upload progress Modal -->
+<div class="modal-backdrop-custom" id="modalUpload" onclick="closeModalOnBackdrop(event,'modalUpload')">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Nahrávanie skriptov</div>
+    <div id="uploadFileList" style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px;"></div>
+    <button class="btn-sheet-primary" id="btnStartUpload" onclick="startUpload()"><i class="bi bi-cloud-upload me-2"></i>NAHRAŤ NA SD KARTU</button>
+    <button class="btn-sheet-secondary" onclick="closeModal('modalUpload')">ZRUŠIŤ</button>
+  </div>
+</div>
+
+<!-- Delete Script Confirm -->
+<div class="modal-backdrop-custom" id="modalDeleteScript" onclick="closeModalOnBackdrop(event,'modalDeleteScript')">
+  <div class="modal-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Vymazať skript</div>
+    <p style="color:var(--text-secondary);font-size:14px;margin-bottom:20px;">
+      Naozaj chceš odstrániť skript <strong id="deleteScriptName" style="color:var(--text-primary)"></strong> zo zoznamu?
+    </p>
+    <button class="btn-sheet-danger" onclick="confirmDeleteScript()"><i class="bi bi-trash me-2"></i>VYMAZAŤ</button>
+    <button class="btn-sheet-secondary" onclick="closeModal('modalDeleteScript')">ZRUŠIŤ</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════
+// STATE
+// ════════════════════════════════
+let state = {
+  host: localStorage.getItem('uak_host') || 'http://4.3.2.1:8080',
+  connected: false,
+  passwords: JSON.parse(localStorage.getItem('uak_passwords') || '[]'),
+  scripts: JSON.parse(localStorage.getItem('uak_scripts') || '[]'),
+  lastPasswordId: localStorage.getItem('uak_last_pw') || null,
+  editingPwId: null,
+  deletingPwId: null,
+  deletingScriptId: null,
+  checkInterval: null
+};
+
+document.getElementById('debug').textContent = 'HOST: ' + state.host;
+
+
+// ════════════════════════════════
+// KEYBOARD / VIEWPORT FIX
+// ════════════════════════════════
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const backdrops = document.querySelectorAll('.modal-backdrop-custom.show');
+    backdrops.forEach(el => {
+      const keyboardHeight = window.innerHeight - window.visualViewport.height;
+      el.style.paddingBottom = keyboardHeight > 50 ? keyboardHeight + 'px' : '0';
+    });
+  });
+}
+
+// ════════════════════════════════
+// INIT
+// ════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('hostInput').value = state.host;
+  document.getElementById('hostDisplay').textContent = state.host.replace('http://', '');
+  renderPasswords();
+  renderScripts();
+  checkConnection();
+  state.checkInterval = setInterval(checkConnection, 10000);
+});
+
+// ════════════════════════════════
+// CONNECTION
+// ════════════════════════════════
+async function checkConnection() {
+  const pill = document.getElementById('connPill');
+  const text = document.getElementById('connText');
+  try {
+    const res = await fetch(`${state.host}/data.json`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      state.connected = true;
+      pill.className = 'connection-pill connected';
+      text.textContent = 'ONLINE';
+      return;
+    }
+  } catch(e) {}
+  state.connected = false;
+  pill.className = 'connection-pill disconnected';
+  text.textContent = 'OFFLINE';
+}
+
+function toggleHostEdit() {
+  const row = document.getElementById('hostRow');
+  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+}
+
+function saveHost() {
+  const val = document.getElementById('hostInput').value.trim().replace(/\/$/, '');
+  if (!val) return;
+  state.host = val;
+  localStorage.setItem('uak_host', val);
+  document.getElementById('hostDisplay').textContent = val.replace('http://','');
+  document.getElementById('hostRow').style.display = 'none';
+  checkConnection();
+  showToast('Host uložený', 'info');
+}
+
+// ════════════════════════════════
+// TABS
+// ════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('pane-' + tab).classList.add('active');
+  if (tab === 'scripts' && state.connected) loadScriptsFromSD();
+}
+
+// ════════════════════════════════
+// PASSWORDS
+// ════════════════════════════════
+function savePasswordsToStorage() {
+  localStorage.setItem('uak_passwords', JSON.stringify(state.passwords));
+}
+
+function renderPasswords() {
+  const list = document.getElementById('passwordList');
+  const quickName = document.getElementById('quickName');
+  const quickBtn = document.getElementById('quickSendBtn');
+
+  // Quick access
+  const lastPw = state.passwords.find(p => p.id === state.lastPasswordId);
+  if (lastPw) {
+    quickName.textContent = lastPw.name;
+    quickName.className = 'quick-name';
+    quickBtn.disabled = false;
+  } else {
+    quickName.textContent = 'Žiadne heslo nie je vybrané';
+    quickName.className = 'quick-name empty';
+    quickBtn.disabled = true;
+  }
+
+  if (state.passwords.length === 0) {
+    list.innerHTML = `<div class="empty-state"><i class="bi bi-key"></i><p>Žiadne heslá.<br>Pridaj prvé kliknutím na +</p></div>`;
+    return;
+  }
+
+  list.innerHTML = state.passwords.map(pw => `
+    <div class="list-item" id="pwitem-${pw.id}" onclick="sendPassword('${pw.id}')">
+      <div class="item-icon"><i class="bi bi-key"></i></div>
+      <div class="item-info">
+        <div class="item-name">${escHtml(pw.name)}</div>
+        <div class="item-meta">••••••••</div>
+      </div>
+      <div class="item-actions" onclick="event.stopPropagation()">
+        <button class="btn-action primary" onclick="openEditPassword('${pw.id}')" title="Editovať"><i class="bi bi-pencil"></i></button>
+        <button class="btn-action danger" onclick="openDeletePassword('${pw.id}')" title="Vymazať"><i class="bi bi-trash"></i></button>
+      </div>
+      <div class="item-feedback success" id="fb-ok-${pw.id}"><i class="bi bi-check-lg"></i> ODOSLANÉ</div>
+      <div class="item-feedback error" id="fb-err-${pw.id}"><i class="bi bi-x-lg"></i> CHYBA</div>
+    </div>
+  `).join('');
+}
+
+function openAddPassword() {
+  state.editingPwId = null;
+  document.getElementById('pwModalTitle').textContent = 'Pridať heslo';
+  document.getElementById('pwName').value = '';
+  document.getElementById('pwValue').value = '';
+  openModal('modalPassword');
+  setTimeout(() => document.getElementById('pwName').focus(), 300);
+}
+
+function openEditPassword(id) {
+  const pw = state.passwords.find(p => p.id === id);
+  if (!pw) return;
+  state.editingPwId = id;
+  document.getElementById('pwModalTitle').textContent = 'Editovať heslo';
+  document.getElementById('pwName').value = pw.name;
+  document.getElementById('pwValue').value = pw.value;
+  openModal('modalPassword');
+}
+
+function savePassword() {
+  const name = document.getElementById('pwName').value.trim();
+  const value = document.getElementById('pwValue').value;
+  if (!name || !value) { showToast('Vyplň oba polia', 'error'); return; }
+
+  if (state.editingPwId) {
+    const idx = state.passwords.findIndex(p => p.id === state.editingPwId);
+    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].value = value; }
+  } else {
+    state.passwords.push({ id: uid(), name, value });
+  }
+  savePasswordsToStorage();
+  renderPasswords();
+  closeModal('modalPassword');
+  showToast(state.editingPwId ? 'Heslo aktualizované' : 'Heslo pridané', 'success');
+}
+
+function openDeletePassword(id) {
+  state.deletingPwId = id;
+  const pw = state.passwords.find(p => p.id === id);
+  document.getElementById('deletePwName').textContent = pw ? pw.name : '';
+  openModal('modalDeletePw');
+}
+
+function confirmDeletePassword() {
+  state.passwords = state.passwords.filter(p => p.id !== state.deletingPwId);
+  if (state.lastPasswordId === state.deletingPwId) {
+    state.lastPasswordId = null;
+    localStorage.removeItem('uak_last_pw');
+  }
+  savePasswordsToStorage();
+  renderPasswords();
+  closeModal('modalDeletePw');
+  showToast('Heslo vymazané', 'info');
+}
+
+async function sendPassword(id) {
+  const pw = state.passwords.find(p => p.id === id);
+  if (!pw) return;
+
+  // Set as last used
+  state.lastPasswordId = id;
+  localStorage.setItem('uak_last_pw', id);
+  renderPasswords();
+
+  if (!state.connected) {
+    showFeedback(id, 'error');
+    showToast('UAK nie je dostupný', 'error');
+    return;
+  }
+
+  try {
+    const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent('STRING ' + pw.value)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (res.ok || res.redirected) {
+      showFeedback(id, 'success');
+      showToast(`"${pw.name}" odoslané`, 'success');
+    } else {
+      showFeedback(id, 'error');
+      showToast('Chyba pri odoslaní', 'error');
+    }
+  } catch(e) {
+    showFeedback(id, 'error');
+    showToast('Nedostupný', 'error');
+    state.connected = false;
+    document.getElementById('connPill').className = 'connection-pill disconnected';
+    document.getElementById('connText').textContent = 'OFFLINE';
+  }
+}
+
+async function sendQuick() {
+  if (state.lastPasswordId) await sendPassword(state.lastPasswordId);
+}
+
+function showFeedback(id, type) {
+  const okEl = document.getElementById(`fb-ok-${id}`);
+  const errEl = document.getElementById(`fb-err-${id}`);
+  if (!okEl || !errEl) return;
+  const el = type === 'success' ? okEl : errEl;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 1500);
+}
+
+// ════════════════════════════════
+// IMPORT / EXPORT
+// ════════════════════════════════
+function exportPasswords() {
+  const data = JSON.stringify({ version: 1, passwords: state.passwords }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'uak_passwords.json';
+  a.click();
+  showToast('Exportované', 'success');
+}
+
+function triggerImport() {
+  document.getElementById('importFile').click();
+}
+
+function importPasswords(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.passwords && Array.isArray(data.passwords)) {
+        state.passwords = data.passwords;
+        savePasswordsToStorage();
+        renderPasswords();
+        showToast(`Importovaných ${data.passwords.length} hesiel`, 'success');
+      } else {
+        showToast('Neplatný formát súboru', 'error');
+      }
+    } catch(err) {
+      showToast('Chyba pri čítaní súboru', 'error');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ════════════════════════════════
+// SCRIPTS
+// ════════════════════════════════
+function saveScriptsToStorage() {
+  localStorage.setItem('uak_scripts', JSON.stringify(state.scripts));
+}
+
+function renderScripts() {
+  const list = document.getElementById('scriptList');
+  if (state.scripts.length === 0) {
+    list.innerHTML = `<div class="empty-state"><i class="bi bi-file-code"></i><p>Žiadne skripty na SD karte.<br>Pripoj UAK a klikni na <i class="bi bi-arrow-clockwise"></i></p></div>`;
+    return;
+  }
+  list.innerHTML = state.scripts.map(sc => `
+    <div class="list-item script-item" id="scitem-${sc.id}">
+      <div class="item-icon"><i class="bi bi-file-earmark-code"></i></div>
+      <div class="item-info">
+        <div class="item-name">${escHtml(sc.name)}</div>
+        <div class="item-meta">${escHtml(sc.filename)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="btn-action primary" onclick="downloadScript('${sc.id}')" title="Zálohovať do telefónu"><i class="bi bi-download"></i></button>
+        <button class="btn-run" onclick="runScript('${sc.id}')">RUN</button>
+        <button class="btn-action danger" onclick="openDeleteScript('${sc.id}')" title="Vymazať zo SD"><i class="bi bi-trash"></i></button>
+      </div>
+      <div class="item-feedback success" id="sfb-ok-${sc.id}"><i class="bi bi-play-fill"></i> SPUSTENÉ</div>
+      <div class="item-feedback error" id="sfb-err-${sc.id}"><i class="bi bi-x-lg"></i> CHYBA</div>
+    </div>
+  `).join('');
+}
+
+async function loadScriptsFromSD() {
+  if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
+
+  const loadingEl = document.getElementById('scriptsLoading');
+  const listEl = document.getElementById('scriptList');
+  const btnRefresh = document.getElementById('btnRefreshScripts');
+
+  loadingEl.style.display = 'block';
+  listEl.style.display = 'none';
+  btnRefresh.querySelector('i').style.animation = 'spin 1s linear infinite';
+
+  try {
+    const res = await fetch(`${state.host}/data.json`, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+    const files = (data.fileListing || []).filter(f =>
+      f.toLowerCase().startsWith('/duckyscripts/') && f.toLowerCase().endsWith('.ds')
+    );
+
+    state.scripts = files.map(f => {
+      const filename = f.replace(/^\/duckyscripts\//i, '');
+      const name = filename.replace(/\.ds$/i, '');
+      const existing = state.scripts.find(s => s.filename === filename);
+      return { id: existing ? existing.id : uid(), name, filename };
+    });
+
+    saveScriptsToStorage();
+    renderScripts();
+
+    if (state.scripts.length === 0) {
+      showToast('Žiadne .ds súbory v /DuckyScripts/', 'info');
+    } else {
+      showToast(`Načítaných ${state.scripts.length} skriptov`, 'success');
+    }
+  } catch(e) {
+    showToast('Chyba pri načítaní zo SD', 'error');
+  } finally {
+    loadingEl.style.display = 'none';
+    listEl.style.display = 'flex';
+    btnRefresh.querySelector('i').style.animation = '';
+  }
+}
+
+function openDeleteScript(id) {
+  state.deletingScriptId = id;
+  const sc = state.scripts.find(s => s.id === id);
+  document.getElementById('deleteScriptName').textContent = sc ? sc.name : '';
+  openModal('modalDeleteScript');
+}
+
+async function confirmDeleteScript() {
+  const sc = state.scripts.find(s => s.id === state.deletingScriptId);
+  closeModal('modalDeleteScript');
+  if (!sc) return;
+
+  if (state.connected) {
+    try {
+      const path = `/DuckyScripts/${sc.filename}`;
+      await fetch(`${state.host}/delete?filename=${encodeURIComponent(path)}`, { signal: AbortSignal.timeout(3000) });
+    } catch(e) {}
+  }
+
+  state.scripts = state.scripts.filter(s => s.id !== state.deletingScriptId);
+  saveScriptsToStorage();
+  renderScripts();
+  showToast('Skript vymazaný', 'info');
+}
+
+async function runScript(id) {
+  const sc = state.scripts.find(s => s.id === id);
+  if (!sc) return;
+  if (!state.connected) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
+  try {
+    const path = `/DuckyScripts/${sc.filename}`;
+    const url = `${state.host}/runfile?filename=${encodeURIComponent(path)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (res.ok || res.redirected) {
+      showScriptFeedback(id, 'success');
+      showToast(`"${sc.name}" spustený`, 'success');
+    } else {
+      showScriptFeedback(id, 'error');
+      showToast('Chyba pri spustení', 'error');
+    }
+  } catch(e) {
+    showScriptFeedback(id, 'error');
+    showToast('Nedostupný', 'error');
+  }
+}
+
+async function downloadScript(id) {
+  const sc = state.scripts.find(s => s.id === id);
+  if (!sc) return;
+  if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
+  try {
+    const path = `/DuckyScripts/${sc.filename}`;
+    const url = `${state.host}/download?filename=${encodeURIComponent(path)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) { showToast('Súbor sa nedá stiahnuť', 'error'); return; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sc.filename;
+    a.click();
+    showToast(`"${sc.name}" uložený`, 'success');
+  } catch(e) {
+    showToast('Chyba pri sťahovaní', 'error');
+  }
+}
+
+// ── UPLOAD ──
+let filesToUpload = [];
+
+function triggerUploadScript() {
+  document.getElementById('uploadScriptFile').click();
+}
+
+function uploadScripts(event) {
+  filesToUpload = Array.from(event.target.files);
+  if (filesToUpload.length === 0) return;
+
+  const listEl = document.getElementById('uploadFileList');
+  listEl.innerHTML = filesToUpload.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);">
+      <i class="bi bi-file-earmark-code" style="color:var(--warning);font-size:16px;flex-shrink:0;"></i>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(f.name)}</div>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">${(f.size/1024).toFixed(1)} KB</div>
+      </div>
+      <div class="upload-status" id="ustatus-${i}" style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">ČAKÁ</div>
+    </div>
+  `).join('');
+
+  openModal('modalUpload');
+  event.target.value = '';
+}
+
+async function startUpload() {
+  if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
+  const btn = document.getElementById('btnStartUpload');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>NAHRÁVAM...';
+
+  let successCount = 0;
+  for (let i = 0; i < filesToUpload.length; i++) {
+    const file = filesToUpload[i];
+    const statusEl = document.getElementById(`ustatus-${i}`);
+    statusEl.textContent = '...';
+    statusEl.style.color = 'var(--warning)';
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      const res = await fetch(`${state.host}/uploadFile`, {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(15000)
+      });
+      if (res.ok) {
+        statusEl.textContent = 'OK';
+        statusEl.style.color = 'var(--accent)';
+        successCount++;
+      } else {
+        statusEl.textContent = 'CHYBA';
+        statusEl.style.color = 'var(--danger)';
+      }
+    } catch(e) {
+      statusEl.textContent = 'CHYBA';
+      statusEl.style.color = 'var(--danger)';
+    }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="bi bi-check-lg me-2"></i>HOTOVO';
+
+  showToast(`Nahraných ${successCount}/${filesToUpload.length} súborov`, successCount === filesToUpload.length ? 'success' : 'error');
+
+  if (successCount > 0) {
+    setTimeout(() => {
+      closeModal('modalUpload');
+      loadScriptsFromSD();
+    }, 1200);
+  }
+}
+
+function showScriptFeedback(id, type) {
+  const el = document.getElementById(`sfb-${type === 'success' ? 'ok' : 'err'}-${id}`);
+  if (!el) return;
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 1500);
+}
+
+// ════════════════════════════════
+// MODAL HELPERS
+// ════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function closeModalOnBackdrop(e, id) {
+  if (e.target === document.getElementById(id)) closeModal(id);
+}
+
+// ════════════════════════════════
+// TOAST
+// ════════════════════════════════
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const icons = { success: 'bi-check-circle', error: 'bi-x-circle', info: 'bi-info-circle' };
+  const el = document.createElement('div');
+  el.className = `toast-item ${type}`;
+  el.innerHTML = `<i class="bi ${icons[type]}"></i>${msg}`;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ════════════════════════════════
+// UTILS
+// ════════════════════════════════
+function uid() { return Math.random().toString(36).slice(2, 9); }
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════
+// KEYBOARD / VIEWPORT FIX
+// Posúva modal hore keď vyskočí
+// softvérová klávesnica
+// ════════════════════════════════
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const viewportHeight = window.visualViewport.height;
+    const windowHeight = window.innerHeight;
+    const keyboardHeight = windowHeight - viewportHeight;
+
+    document.querySelectorAll('.modal-backdrop-custom.show').forEach(modal => {
+      modal.style.bottom = keyboardHeight > 50 ? keyboardHeight + 'px' : '0px';
+      modal.style.height = viewportHeight + 'px';
+    });
+  });
+}
+
+// ════════════════════════════════
+// SERVICE WORKER — offline cache
+// ════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/UAK-Control/sw.js', { scope: '/UAK-Control/' })
+    .then(reg => console.log('SW registered, scope:', reg.scope))
+    .catch(e => console.warn('SW error:', e));
+}
+
+// ── PWA Install prompt ──
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'none';
+  showToast('Aplikácia nainštalovaná!', 'success');
+});
+
+function triggerInstall() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+  } else {
+    showToast('Otvor menu prehliadača → Pridať na plochu', 'info');
+  }
+}
+
+async function testFetch() {
+  const url = 'http://4.3.2.1:8080/data.json';
+  try {
+    const r = await fetch(url, {signal: AbortSignal.timeout(3000)});
+    alert('OK status=' + r.status + '\nURL=' + url);
+  } catch(e) {
+    alert('CHYBA:\n' + e.name + '\n' + e.message + '\nURL=' + url);
+  }
+}
+</script>
+</body>
+</html>
