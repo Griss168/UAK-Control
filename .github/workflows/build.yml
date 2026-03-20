@@ -65,7 +65,7 @@ jobs:
         run: |
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
 
-      - name: Add storage permission to AndroidManifest
+      - name: Add storage and network permissions
         run: |
           sed -i 's/<\/manifest>/    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>\n<\/manifest>/' android/app/src/main/AndroidManifest.xml
 
@@ -144,11 +144,13 @@ jobs:
                 os.remove(fpath)
             print(f'{folder}: {size}x{size} OK')
 
+          # Zmazat mipmap-anydpi-v26 — obsahuje XML ktore prepisuju nase PNG
           anydpi = f'{base}/mipmap-anydpi-v26'
           if os.path.exists(anydpi):
             shutil.rmtree(anydpi)
             print('Removed mipmap-anydpi-v26')
 
+          # Zmazat drawable XML adaptive ikony
           for d in os.listdir(base):
             if 'drawable' in d:
               for fname in ['ic_launcher.xml', 'ic_launcher_foreground.xml',
