@@ -1069,11 +1069,30 @@ function showFeedback(id, type) {
 // ════════════════════════════════
 function exportPasswords() {
   const data = JSON.stringify({ version: 1, passwords: state.passwords }, null, 2);
+
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    const { Filesystem } = window.Capacitor.Plugins;
+    Filesystem.writeFile({
+      path: 'uak_passwords.json',
+      data: btoa(unescape(encodeURIComponent(data))),
+      directory: 'DOWNLOADS',
+      recursive: true
+    }).then(() => {
+      showToast('Uložené do Downloads/uak_passwords.json', 'success');
+    }).catch(e => {
+      showToast('Chyba: ' + e.message, 'error');
+    });
+    return;
+  }
+
   const blob = new Blob([data], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'uak_passwords.json';
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   showToast('Exportované', 'success');
 }
 
