@@ -1069,30 +1069,11 @@ function showFeedback(id, type) {
 // ════════════════════════════════
 function exportPasswords() {
   const data = JSON.stringify({ version: 1, passwords: state.passwords }, null, 2);
-
-  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-    const { Filesystem } = window.Capacitor.Plugins;
-    Filesystem.writeFile({
-      path: 'uak_passwords.json',
-      data: btoa(unescape(encodeURIComponent(data))),
-      directory: 'DOWNLOADS',
-      recursive: true
-    }).then(() => {
-      showToast('Uložené do Downloads/uak_passwords.json', 'success');
-    }).catch(e => {
-      showToast('Chyba: ' + e.message, 'error');
-    });
-    return;
-  }
-
   const blob = new Blob([data], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'uak_passwords.json';
-  document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   showToast('Exportované', 'success');
 }
 
@@ -1212,7 +1193,7 @@ async function confirmDeleteScript() {
 
   if (state.connected) {
     try {
-      await http.get({ url: `${state.host}/delete?filename=${sc.filename}`, connectTimeout: 3000, readTimeout: 3000 });
+      await http.get({ url: `${state.host}/delete`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000 });
     } catch(e) {}
   }
 
@@ -1227,8 +1208,7 @@ async function runScript(id) {
   if (!sc) return;
   if (!state.connected) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
   try {
-    const url = `${state.host}/runfile?filename=${sc.filename}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000 });
+    const res = await http.get({ url: `${state.host}/runfile`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000 });
     if (res.status >= 200 && res.status < 400) {
       showScriptFeedback(id, 'success');
       showToast(`"${sc.name}" spustený`, 'success');
@@ -1247,8 +1227,7 @@ async function downloadScript(id) {
   if (!sc) return;
   if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
   try {
-    const url = `${state.host}/download?filename=${sc.filename}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, responseType: 'blob' });
+    const res = await http.get({ url: `${state.host}/download`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000, responseType: 'blob' });
     if (res.status < 200 || res.status >= 300) { showToast('Súbor sa nedá stiahnuť', 'error'); return; }
     const blob = new Blob([res.data]);
     const a = document.createElement('a');

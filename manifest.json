@@ -8,9 +8,7 @@
   "orientation": "portrait",
   "background_color": "#1c1c1c",
   "theme_color": "#1c1c1c",
-  "categories": [
-    "utilities"
-  ],
+  "categories": ["utilities"],
   "icons": [
     {
       "src": "/UAK-Control/icons/icon-192.png",
