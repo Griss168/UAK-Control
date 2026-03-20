@@ -117,7 +117,7 @@ jobs:
         run: |
           pip install Pillow -q
           python3 << 'EOF'
-          from PIL import Image
+          from PIL import Image, ImageDraw
           import os, shutil
 
           sizes = {
@@ -130,35 +130,54 @@ jobs:
 
           src = Image.open('icons/icon-512.png').convert('RGBA')
           base = 'android/app/src/main/res'
+          # Farba pozadia zodpovedá theme_color aplikácie
+          BG = (28, 28, 28)
 
           for folder, size in sizes.items():
             path = f'{base}/{folder}'
             os.makedirs(path, exist_ok=True)
-            img = src.resize((size, size), Image.LANCZOS)
-            img.save(f'{path}/ic_launcher.png')
-            img.save(f'{path}/ic_launcher_round.png')
+            icon = src.resize((size, size), Image.LANCZOS)
+
+            # ic_launcher.png — štvorcová ikona s tmavým pozadím (žiadna priehľadnosť)
+            sq = Image.new('RGB', (size, size), BG)
+            sq.paste(icon, mask=icon.split()[3])
+            sq.save(f'{path}/ic_launcher.png')
+
+            # ic_launcher_round.png — ikona orezaná na KRUH s tmavým pozadím
+            # Tmavé pozadie zabraňuje bielemu kruhu pri priehľadných rohoch ikony
+            rnd_bg = Image.new('RGB', (size, size), BG)
+            rnd_bg.paste(icon, mask=icon.split()[3])
+            # Vytvor masku kruhu
+            circle_mask = Image.new('L', (size, size), 0)
+            ImageDraw.Draw(circle_mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+            # Aplikuj masku
+            rnd = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+            rnd.paste(rnd_bg.convert('RGBA'), mask=circle_mask)
+            rnd.save(f'{path}/ic_launcher_round.png')
+
+            # Vymaž akékoľvek XML/foreground/background súbory z mipmap priečinka
             for fname in ['ic_launcher.xml', 'ic_launcher_round.xml',
                           'ic_launcher_foreground.png', 'ic_launcher_background.png']:
               fpath = f'{path}/{fname}'
               if os.path.exists(fpath):
                 os.remove(fpath)
-            print(f'{folder}: {size}x{size} OK')
+            print(f'{folder}: {size}x{size} square + round OK')
 
-          # Zmazat mipmap-anydpi-v26 — obsahuje XML ktore prepisuju nase PNG
+          # Zmaž mipmap-anydpi-v26 — obsahuje XML ktoré prepíšu naše PNG adaptívnou ikonou
           anydpi = f'{base}/mipmap-anydpi-v26'
           if os.path.exists(anydpi):
             shutil.rmtree(anydpi)
             print('Removed mipmap-anydpi-v26')
 
-          # Zmazat drawable XML adaptive ikony
+          # Zmaž VŠETKY ic_launcher* súbory z drawable priečinkov
+          # (foreground.png, background.xml/png, atď. — všetko čo by mohlo aktivovať adaptive ikonu)
           for d in os.listdir(base):
             if 'drawable' in d:
-              for fname in ['ic_launcher.xml', 'ic_launcher_foreground.xml',
-                            'ic_launcher_background.xml', 'ic_launcher_round.xml']:
-                fpath = f'{base}/{d}/{fname}'
-                if os.path.exists(fpath):
-                  os.remove(fpath)
-                  print(f'Removed {fpath}')
+              dp = f'{base}/{d}'
+              for fname in os.listdir(dp):
+                if fname.startswith('ic_launcher'):
+                  os.remove(f'{dp}/{fname}')
+                  print(f'Removed {dp}/{fname}')
           EOF
 
       - name: Build APK

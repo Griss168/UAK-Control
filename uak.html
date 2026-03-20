@@ -1191,10 +1191,14 @@ async function confirmDeleteScript() {
   closeModal('modalDeleteScript');
   if (!sc) return;
 
-  if (state.connected) {
-    try {
-      await http.get({ url: `${state.host}/delete`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000 });
-    } catch(e) {}
+  if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
+
+  try {
+    // OPRAVA: parameter priamo v URL, nie cez params objekt
+    const url = `${state.host}/delete?filename=${encodeURIComponent(sc.filename)}`;
+    await http.get({ url, connectTimeout: 3000, readTimeout: 5000 });
+  } catch(e) {
+    // Výnimka môže nastať aj pri spracovaní 302 redirect odpovede — request bol aj tak odoslaný
   }
 
   state.scripts = state.scripts.filter(s => s.id !== state.deletingScriptId);
@@ -1208,7 +1212,10 @@ async function runScript(id) {
   if (!sc) return;
   if (!state.connected) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
   try {
-    const res = await http.get({ url: `${state.host}/runfile`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000 });
+    // OPRAVA: params objekt nefunguje spoľahlivo — parameter musí byť priamo v URL
+    const url = `${state.host}/runfile?filename=${encodeURIComponent(sc.filename)}`;
+    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 5000 });
+    // Server vráti 302 redirect na /index.html — to je úspech (príkaz bol prijatý)
     if (res.status >= 200 && res.status < 400) {
       showScriptFeedback(id, 'success');
       showToast(`"${sc.name}" spustený`, 'success');
@@ -1227,7 +1234,9 @@ async function downloadScript(id) {
   if (!sc) return;
   if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
   try {
-    const res = await http.get({ url: `${state.host}/download`, params: { filename: sc.filename }, connectTimeout: 3000, readTimeout: 3000, responseType: 'blob' });
+    // OPRAVA: parameter priamo v URL, nie cez params objekt
+    const url = `${state.host}/download?filename=${encodeURIComponent(sc.filename)}`;
+    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, responseType: 'blob' });
     if (res.status < 200 || res.status >= 300) { showToast('Súbor sa nedá stiahnuť', 'error'); return; }
     const blob = new Blob([res.data]);
     const a = document.createElement('a');
