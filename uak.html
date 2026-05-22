@@ -1033,8 +1033,10 @@ async function sendPassword(id) {
   }
 
   try {
+    // shouldEncodeUrlParams:false — URL je už zakódované cez encodeURIComponent.
+    // Bez toho CapacitorHttp query ešte raz prepíše a poškodí špeciálne znaky a medzery.
     const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent('STRING ' + pw.value)}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000 });
+    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, shouldEncodeUrlParams: false });
     if (res.status >= 200 && res.status < 400) {
       showFeedback(id, 'success');
       showToast(`"${pw.name}" odoslané`, 'success');
@@ -1194,9 +1196,10 @@ async function confirmDeleteScript() {
   if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
 
   try {
-    // OPRAVA: parameter priamo v URL, nie cez params objekt
+    // OPRAVA: parameter priamo v URL, nie cez params objekt.
+    // shouldEncodeUrlParams:false — URL je už zakódované, nech ho CapacitorHttp neprepisuje.
     const url = `${state.host}/delete?filename=${encodeURIComponent(sc.filename)}`;
-    await http.get({ url, connectTimeout: 3000, readTimeout: 5000 });
+    await http.get({ url, connectTimeout: 3000, readTimeout: 5000, shouldEncodeUrlParams: false });
   } catch(e) {
     // Výnimka môže nastať aj pri spracovaní 302 redirect odpovede — request bol aj tak odoslaný
   }
@@ -1212,9 +1215,10 @@ async function runScript(id) {
   if (!sc) return;
   if (!state.connected) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
   try {
-    // OPRAVA: params objekt nefunguje spoľahlivo — parameter musí byť priamo v URL
+    // OPRAVA: params objekt nefunguje spoľahlivo — parameter musí byť priamo v URL.
+    // shouldEncodeUrlParams:false — URL je už zakódované, nech ho CapacitorHttp neprepisuje.
     const url = `${state.host}/runfile?filename=${encodeURIComponent(sc.filename)}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 5000 });
+    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 5000, shouldEncodeUrlParams: false });
     // Server vráti 302 redirect na /index.html — to je úspech (príkaz bol prijatý)
     if (res.status >= 200 && res.status < 400) {
       showScriptFeedback(id, 'success');
@@ -1233,17 +1237,47 @@ async function downloadScript(id) {
   const sc = state.scripts.find(s => s.id === id);
   if (!sc) return;
   if (!state.connected) { showToast('UAK nie je dostupný', 'error'); return; }
+
+  const plugins = (window.Capacitor && window.Capacitor.Plugins) ? window.Capacitor.Plugins : {};
+  const Filesystem = plugins.Filesystem;
+  const Share = plugins.Share;
+  const outName = sc.filename.split('/').pop();   // .ds súbory sú text, sťahujeme ako text
+
   try {
-    // OPRAVA: parameter priamo v URL, nie cez params objekt
+    // shouldEncodeUrlParams:false — URL je už zakódované, nech ho CapacitorHttp neprepisuje.
     const url = `${state.host}/download?filename=${encodeURIComponent(sc.filename)}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, responseType: 'blob' });
+    const res = await http.get({ url, connectTimeout: 5000, readTimeout: 10000, responseType: 'text', shouldEncodeUrlParams: false });
     if (res.status < 200 || res.status >= 300) { showToast('Súbor sa nedá stiahnuť', 'error'); return; }
-    const blob = new Blob([res.data]);
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = sc.filename;
-    a.click();
-    showToast(`"${sc.name}" uložený`, 'success');
+
+    const content = typeof res.data === 'string' ? res.data : (res.data == null ? '' : String(res.data));
+
+    if (Filesystem) {
+      // Android (WebView): <a download> nevyvolá dialóg. Zapíšeme súbor a otvoríme
+      // systémový dialóg (Share), kde používateľ zvolí kam ho uložiť/poslať.
+      const writeRes = await Filesystem.writeFile({
+        path: outName,
+        data: content,
+        directory: 'CACHE',
+        encoding: 'utf8',
+        recursive: true
+      });
+      if (Share) {
+        try {
+          await Share.share({ title: outName, url: writeRes.uri, dialogTitle: 'Uložiť skript' });
+        } catch(shareErr) {
+          // používateľ dialóg zrušil — súbor je aj tak v cache, nehlásime to ako chybu
+        }
+      }
+      showToast(`"${sc.name}" pripravený na uloženie`, 'success');
+    } else {
+      // Web fallback — pôvodný blob + anchor
+      const blob = new Blob([content], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = outName;
+      a.click();
+      showToast(`"${sc.name}" uložený`, 'success');
+    }
   } catch(e) {
     showToast('Chyba pri sťahovaní', 'error');
   }
