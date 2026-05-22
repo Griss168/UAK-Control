@@ -38,7 +38,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
   // UAK API requesty — nikdy necachuj, vždy živé (alebo timeout)
-  if (url.hostname === '4.3.2.1' && url.port === '8080') return;
+  if (url.hostname === '192.168.4.1' && url.port === '8080') return;
 
   // Navigačné requesty — vždy vráť uak.html z cache (offline SPA)
   if (e.request.mode === 'navigate') {
