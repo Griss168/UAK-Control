@@ -34,6 +34,7 @@ jobs:
           mkdir -p www
           cp uak.html www/index.html
           cp -r icons www/icons 2>/dev/null || true
+          cp -r vendor www/vendor 2>/dev/null || true
           cp manifest.json www/manifest.json 2>/dev/null || true
 
       - name: Init Capacitor config
@@ -82,7 +83,7 @@ jobs:
               </trust-anchors>
             </base-config>
             <domain-config cleartextTrafficPermitted="true">
-              <domain includeSubdomains="true">4.3.2.1</domain>
+              <domain includeSubdomains="true">192.168.4.1</domain>
             </domain-config>
           </network-security-config>
           EOF
