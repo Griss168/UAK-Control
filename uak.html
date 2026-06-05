@@ -451,6 +451,62 @@
   }
   .btn-sheet-secondary:active { background: var(--bg-elevated); }
 
+  /* Toggle switch row (e.g. "zakončiť heslo Enterom") */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .toggle-row .toggle-label {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+  }
+  .toggle-row .toggle-label i { color: var(--text-muted); margin-right: 6px; }
+  .switch {
+    position: relative;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 26px;
+    cursor: pointer;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 26px;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .switch .slider::before {
+    content: "";
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+  }
+  .switch input:checked + .slider {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+  }
+  .switch input:checked + .slider::before {
+    transform: translate(18px, -50%);
+    background: var(--accent);
+  }
+
   .btn-sheet-danger {
     width: 100%;
     padding: 14px;
@@ -768,6 +824,13 @@ self.addEventListener('fetch', e => {
     <input type="text" class="form-control-custom" id="pwName" placeholder="napr. Gmail, Work VPN...">
     <label class="form-label-custom">Heslo</label>
     <input type="text" class="form-control-custom" id="pwValue" placeholder="Samotné heslo...">
+    <div class="toggle-row">
+      <span class="toggle-label"><i class="bi bi-arrow-return-left"></i>Zakončiť heslo Enterom</span>
+      <label class="switch">
+        <input type="checkbox" id="pwEnter">
+        <span class="slider"></span>
+      </label>
+    </div>
     <button class="btn-sheet-primary" onclick="savePassword()">ULOŽIŤ</button>
     <button class="btn-sheet-secondary" onclick="closeModal('modalPassword')">ZRUŠIŤ</button>
   </div>
@@ -957,7 +1020,7 @@ function renderPasswords() {
       <div class="item-icon"><i class="bi bi-key"></i></div>
       <div class="item-info">
         <div class="item-name">${escHtml(pw.name)}</div>
-        <div class="item-meta">••••••••</div>
+        <div class="item-meta">••••••••${pw.enter ? ' <i class="bi bi-arrow-return-left" title="Zakončené Enterom"></i>' : ''}</div>
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
         <button class="btn-action primary" onclick="openEditPassword('${pw.id}')" title="Editovať"><i class="bi bi-pencil"></i></button>
@@ -974,6 +1037,7 @@ function openAddPassword() {
   document.getElementById('pwModalTitle').textContent = 'Pridať heslo';
   document.getElementById('pwName').value = '';
   document.getElementById('pwValue').value = '';
+  document.getElementById('pwEnter').checked = false;
   openModal('modalPassword');
   setTimeout(() => document.getElementById('pwName').focus(), 300);
 }
@@ -985,19 +1049,21 @@ function openEditPassword(id) {
   document.getElementById('pwModalTitle').textContent = 'Editovať heslo';
   document.getElementById('pwName').value = pw.name;
   document.getElementById('pwValue').value = pw.value;
+  document.getElementById('pwEnter').checked = !!pw.enter;
   openModal('modalPassword');
 }
 
 function savePassword() {
   const name = document.getElementById('pwName').value.trim();
   const value = document.getElementById('pwValue').value;
+  const enter = document.getElementById('pwEnter').checked;
   if (!name || !value) { showToast('Vyplň oba polia', 'error'); return; }
 
   if (state.editingPwId) {
     const idx = state.passwords.findIndex(p => p.id === state.editingPwId);
-    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].value = value; }
+    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].value = value; state.passwords[idx].enter = enter; }
   } else {
-    state.passwords.push({ id: uid(), name, value });
+    state.passwords.push({ id: uid(), name, value, enter });
   }
   savePasswordsToStorage();
   renderPasswords();
@@ -1040,9 +1106,12 @@ async function sendPassword(id) {
   }
 
   try {
+    // STRINGLN napíše heslo a hneď pridá ENTER (jeden príkaz, žiadny race),
+    // STRING napíše len heslo. Voľba podľa prepínača v nastavení hesla.
     // shouldEncodeUrlParams:false — URL je už zakódované cez encodeURIComponent.
     // Bez toho CapacitorHttp query ešte raz prepíše a poškodí špeciálne znaky a medzery.
-    const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent('STRING ' + pw.value)}`;
+    const cmd = (pw.enter ? 'STRINGLN ' : 'STRING ') + pw.value;
+    const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent(cmd)}`;
     const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, shouldEncodeUrlParams: false });
     if (res.status >= 200 && res.status < 400) {
       showFeedback(id, 'success');
