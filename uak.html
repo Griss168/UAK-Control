@@ -1155,14 +1155,45 @@ function showFeedback(id, type) {
 // ════════════════════════════════
 // IMPORT / EXPORT
 // ════════════════════════════════
-function exportPasswords() {
+async function exportPasswords() {
   const data = JSON.stringify({ version: 1, passwords: state.passwords }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'uak_passwords.json';
-  a.click();
-  showToast('Exportované', 'success');
+  const outName = 'uak_passwords.json';
+
+  const plugins = (window.Capacitor && window.Capacitor.Plugins) ? window.Capacitor.Plugins : {};
+  const Filesystem = plugins.Filesystem;
+  const Share = plugins.Share;
+
+  if (Filesystem) {
+    // Android (WebView): <a download> nevyvolá dialóg. Zapíšeme súbor a otvoríme
+    // systémový dialóg (Share), kde používateľ zvolí kam ho uložiť/poslať.
+    try {
+      const writeRes = await Filesystem.writeFile({
+        path: outName,
+        data,
+        directory: 'CACHE',
+        encoding: 'utf8',
+        recursive: true
+      });
+      if (Share) {
+        try {
+          await Share.share({ title: outName, url: writeRes.uri, dialogTitle: 'Uložiť heslá' });
+        } catch(shareErr) {
+          // používateľ dialóg zrušil — súbor je aj tak v cache, nehlásime to ako chybu
+        }
+      }
+      showToast('Heslá pripravené na uloženie', 'success');
+    } catch(e) {
+      showToast('Chyba pri exporte', 'error');
+    }
+  } else {
+    // Web fallback — pôvodný blob + anchor
+    const blob = new Blob([data], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = outName;
+    a.click();
+    showToast('Exportované', 'success');
+  }
 }
 
 function triggerImport() {
