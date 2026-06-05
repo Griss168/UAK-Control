@@ -791,7 +791,7 @@ self.addEventListener('fetch', e => {
       <button class="btn-icon" onclick="triggerUploadScript()" title="Nahrať skripty na SD">
         <i class="bi bi-cloud-upload"></i>
       </button>
-      <input type="file" id="uploadScriptFile" accept=".ds,.txt" multiple style="display:none" onchange="uploadScripts(event)">
+      <input type="file" id="uploadScriptFile" accept=".ds" multiple style="display:none" onchange="uploadScripts(event)">
     </div>
   </div>
 
@@ -1408,8 +1408,16 @@ function triggerUploadScript() {
 }
 
 function uploadScripts(event) {
-  filesToUpload = Array.from(event.target.files);
-  if (filesToUpload.length === 0) return;
+  const selected = Array.from(event.target.files);
+  if (selected.length === 0) return;
+
+  // Na SD smú ísť len DuckyScript súbory (.ds). Ostatné odmietneme.
+  filesToUpload = selected.filter(f => f.name.toLowerCase().endsWith('.ds'));
+  const rejected = selected.length - filesToUpload.length;
+  if (rejected > 0) {
+    showToast(`Povolené sú len .ds súbory (${rejected} ignorovaných)`, 'error');
+  }
+  if (filesToUpload.length === 0) { event.target.value = ''; return; }
 
   const listEl = document.getElementById('uploadFileList');
   listEl.innerHTML = filesToUpload.map((f, i) => `
@@ -1441,15 +1449,38 @@ async function startUpload() {
     statusEl.style.color = 'var(--warning)';
 
     try {
-      const formData = new FormData();
-      formData.append('file', file, file.name);
-      const res = await http.post({
-        url: `${state.host}/uploadFile`,
-        headers: {},
-        data: formData,
-        connectTimeout: 15000,
-        readTimeout: 15000
-      });
+      let res;
+      if (CapacitorHttp) {
+        // Android: CapacitorHttp serializuje FormObjekt nespoľahlivo a ESP
+        // multipart parser to odmietne -> "chyba prenosu". Multipart telo preto
+        // zostavíme ručne a pošleme ako string s explicitným boundary.
+        // (.ds sú textové, takže string telo je bezpečné.)
+        const content = await file.text();
+        const boundary = '----UAKBoundary' + Date.now() + i;
+        const body =
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="file"; filename="${file.name}"\r\n` +
+          `Content-Type: application/octet-stream\r\n\r\n` +
+          content + `\r\n` +
+          `--${boundary}--\r\n`;
+        res = await http.post({
+          url: `${state.host}/uploadFile`,
+          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+          data: body,
+          connectTimeout: 15000,
+          readTimeout: 15000
+        });
+      } else {
+        // Web (prehliadač) — natívne FormData, fetch nastaví boundary sám
+        const formData = new FormData();
+        formData.append('file', file, file.name);
+        res = await http.post({
+          url: `${state.host}/uploadFile`,
+          data: formData,
+          connectTimeout: 15000,
+          readTimeout: 15000
+        });
+      }
       if (res.status >= 200 && res.status < 300) {
         statusEl.textContent = 'OK';
         statusEl.style.color = 'var(--accent)';
