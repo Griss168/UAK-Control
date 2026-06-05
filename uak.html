@@ -1431,6 +1431,7 @@ function uploadScripts(event) {
     </div>
   `).join('');
 
+  uploadDebugReset();   // skry prípadný starý debug výpis z predošlého pokusu
   openModal('modalUpload');
   event.target.value = '';
 }
@@ -1440,6 +1441,10 @@ async function startUpload() {
   const btn = document.getElementById('btnStartUpload');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>NAHRÁVAM...';
+
+  const dbg = uploadDebugReset();
+  uploadDebugLog(dbg, `Cieľ: ${state.host}/uploadFile`);
+  uploadDebugLog(dbg, `Režim: ${CapacitorHttp ? 'Android (manuálny multipart)' : 'web (FormData)'}`);
 
   let successCount = 0;
   for (let i = 0; i < filesToUpload.length; i++) {
@@ -1463,6 +1468,7 @@ async function startUpload() {
           `Content-Type: application/octet-stream\r\n\r\n` +
           content + `\r\n` +
           `--${boundary}--\r\n`;
+        uploadDebugLog(dbg, `${file.name}: posielam ${body.length} B (obsah ${content.length} B)`);
         res = await http.post({
           url: `${state.host}/uploadFile`,
           headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
@@ -1484,14 +1490,17 @@ async function startUpload() {
       if (res.status >= 200 && res.status < 300) {
         statusEl.textContent = 'OK';
         statusEl.style.color = 'var(--accent)';
+        uploadDebugLog(dbg, `${file.name}: OK (HTTP ${res.status})`);
         successCount++;
       } else {
-        statusEl.textContent = 'CHYBA';
+        statusEl.textContent = `CHYBA ${res.status}`;
         statusEl.style.color = 'var(--danger)';
+        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} — ${describeResponse(res)}`, true);
       }
     } catch(e) {
       statusEl.textContent = 'CHYBA';
       statusEl.style.color = 'var(--danger)';
+      uploadDebugLog(dbg, `${file.name}: výnimka — ${e && e.message ? e.message : e}`, true);
     }
   }
 
@@ -1500,12 +1509,55 @@ async function startUpload() {
 
   showToast(`Nahraných ${successCount}/${filesToUpload.length} súborov`, successCount === filesToUpload.length ? 'success' : 'error');
 
-  if (successCount > 0) {
+  if (successCount === filesToUpload.length) {
+    // Všetko OK — zavri modal. Pri chybe ho necháme otvorený, nech je debug čitateľný.
     setTimeout(() => {
       closeModal('modalUpload');
       loadScriptsFromSD();
     }, 1200);
+  } else {
+    if (successCount > 0) loadScriptsFromSD();
+    uploadDebugLog(dbg, 'Tip: skopíruj tento výpis a pošli ho pri hlásení chyby.');
   }
+}
+
+// ── UPLOAD DEBUG VÝPIS ──
+// Na telefóne nie je dostupná konzola, takže chyby uploadu zobrazíme priamo v modale.
+function uploadDebugReset() {
+  let box = document.getElementById('uploadDebug');
+  if (!box) {
+    box = document.createElement('pre');
+    box.id = 'uploadDebug';
+    box.style.cssText = 'display:none;margin-top:12px;padding:10px;max-height:160px;overflow:auto;'
+      + 'background:#000;border:1px solid var(--border);border-radius:var(--radius-sm);'
+      + 'font-family:var(--font-mono);font-size:10px;line-height:1.5;white-space:pre-wrap;'
+      + 'word-break:break-word;color:var(--text-muted);';
+    const listEl = document.getElementById('uploadFileList');
+    listEl.parentNode.insertBefore(box, listEl.nextSibling);
+  }
+  box.textContent = '';
+  box.style.display = 'none';
+  return box;
+}
+
+function uploadDebugLog(box, msg, isError) {
+  if (!box) return;
+  box.style.display = 'block';
+  const line = document.createElement('div');
+  line.textContent = msg;
+  if (isError) line.style.color = 'var(--danger)';
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+// Vytiahne čitateľný útržok z odpovede servera (telo + status text) pre debug.
+function describeResponse(res) {
+  let body = res && res.data;
+  if (body == null) body = '';
+  else if (typeof body !== 'string') { try { body = JSON.stringify(body); } catch(_) { body = String(body); } }
+  body = body.trim();
+  if (body.length > 300) body = body.slice(0, 300) + '…';
+  return body || '(prázdna odpoveď)';
 }
 
 function showScriptFeedback(id, type) {

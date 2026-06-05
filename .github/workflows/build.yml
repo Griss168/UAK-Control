@@ -225,6 +225,14 @@ jobs:
                   print(f'Removed {dp}/{fname}')
           EOF
 
+      - name: Use persistent debug keystore
+        run: |
+          # Bez tohto runner vygeneruje nový debug.keystore pri každom builde,
+          # takže každý APK je podpísaný iným kľúčom a Android odmietne aktualizáciu
+          # (treba odinštalovať). Tu použijeme stály keystore z repozitára.
+          mkdir -p ~/.android
+          cp keystore/debug.keystore ~/.android/debug.keystore
+
       - name: Build APK
         run: |
           cd android
