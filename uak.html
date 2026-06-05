@@ -470,6 +470,45 @@
     line-height: 1.3;
   }
   .toggle-row .toggle-label i { color: var(--text-muted); margin-right: 6px; }
+  .kb-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .kb-switch-label {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .kb-switch-label i { color: var(--text-muted); }
+  .kb-switch {
+    display: flex;
+    flex-shrink: 0;
+    background: var(--bg-dark, #1c1c1c);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .kb-opt {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .kb-opt.active {
+    background: var(--accent);
+    color: #000;
+  }
   .switch {
     position: relative;
     flex: 0 0 auto;
@@ -755,12 +794,26 @@ self.addEventListener('fetch', e => {
     </button>
   </div>
 
+  <!-- Keyboard layout switcher -->
+  <div class="kb-switch-row">
+    <span class="kb-switch-label"><i class="bi bi-keyboard me-1"></i>Rozloženie klávesnice</span>
+    <div class="kb-switch" id="kbSwitch">
+      <button class="kb-opt" data-layout="win_en-US" onclick="setKbLayout('win_en-US')">EN (US)</button>
+      <button class="kb-opt" data-layout="win_sk-SK" onclick="setKbLayout('win_sk-SK')">SK</button>
+    </div>
+  </div>
+
   <!-- Password List -->
   <div class="section-header">
     <span class="section-title">Zoznam hesiel</span>
-    <button class="btn-icon" onclick="openAddPassword()" title="Pridať heslo">
-      <i class="bi bi-plus-lg"></i>
-    </button>
+    <div style="display:flex;gap:6px;">
+      <button class="btn-icon" id="btnSortPw" onclick="togglePwSort()" title="Zoradiť podľa abecedy">
+        <i class="bi bi-sort-alpha-down"></i>
+      </button>
+      <button class="btn-icon" onclick="openAddPassword()" title="Pridať heslo">
+        <i class="bi bi-plus-lg"></i>
+      </button>
+    </div>
   </div>
 
   <div class="item-list" id="passwordList">
@@ -785,6 +838,9 @@ self.addEventListener('fetch', e => {
       <div style="font-size:10px;color:var(--text-muted);margin-top:3px;font-family:var(--font-mono);">/DuckyScripts/</div>
     </div>
     <div style="display:flex;gap:6px;">
+      <button class="btn-icon" id="btnSortScript" onclick="toggleScriptSort()" title="Zoradiť podľa abecedy">
+        <i class="bi bi-sort-alpha-down"></i>
+      </button>
       <button class="btn-icon" onclick="loadScriptsFromSD()" title="Načítať zo SD karty" id="btnRefreshScripts">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
@@ -822,6 +878,9 @@ self.addEventListener('fetch', e => {
     <div class="sheet-title" id="pwModalTitle">Pridať heslo</div>
     <label class="form-label-custom">Názov / popis</label>
     <input type="text" class="form-control-custom" id="pwName" placeholder="napr. Gmail, Work VPN...">
+    <label class="form-label-custom">Login (voliteľné)</label>
+    <input type="text" class="form-control-custom" id="pwLogin" placeholder="Používateľské meno...">
+    <div style="font-size:11px;color:var(--text-muted);margin:-8px 0 12px;">Ak je vyplnený, pri odoslaní sa napíše login, stlačí sa Tab a potom heslo.</div>
     <label class="form-label-custom">Heslo</label>
     <input type="text" class="form-control-custom" id="pwValue" placeholder="Samotné heslo...">
     <div class="toggle-row">
@@ -903,7 +962,12 @@ let state = {
   editingPwId: null,
   deletingPwId: null,
   deletingScriptId: null,
-  checkInterval: null
+  checkInterval: null,
+  // Smer zoradenia tabuliek (podľa názvu): 'asc' | 'desc'
+  pwSort: localStorage.getItem('uak_pw_sort') || 'asc',
+  scriptSort: localStorage.getItem('uak_script_sort') || 'asc',
+  // Rozloženie klávesnice cieľového PC pri odosielaní: 'win_en-US' | 'win_sk-SK'
+  kbLayout: localStorage.getItem('uak_kb_layout') || 'win_en-US'
 };
 
 // Migrácia: starý verejný default 4.3.2.1 -> nový privátny default.
@@ -933,6 +997,7 @@ if (window.visualViewport) {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hostInput').value = state.host;
   document.getElementById('hostDisplay').textContent = state.host.replace('http://', '');
+  updateKbSwitchUI();
   renderPasswords();
   renderScripts();
   checkConnection();
@@ -1025,12 +1090,14 @@ function renderPasswords() {
     return;
   }
 
-  list.innerHTML = state.passwords.map(pw => `
+  updateSortIcon('btnSortPw', state.pwSort);
+
+  list.innerHTML = sortByName(state.passwords, state.pwSort).map(pw => `
     <div class="list-item" id="pwitem-${pw.id}" onclick="sendPassword('${pw.id}')">
       <div class="item-icon"><i class="bi bi-key"></i></div>
       <div class="item-info">
         <div class="item-name">${escHtml(pw.name)}</div>
-        <div class="item-meta">••••••••${pw.enter ? ' <i class="bi bi-arrow-return-left" title="Zakončené Enterom"></i>' : ''}</div>
+        <div class="item-meta">${pw.login ? escHtml(pw.login) + ' <i class="bi bi-arrow-bar-right" title="Login + Tab"></i> ' : ''}••••••••${pw.enter ? ' <i class="bi bi-arrow-return-left" title="Zakončené Enterom"></i>' : ''}</div>
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
         <button class="btn-action primary" onclick="openEditPassword('${pw.id}')" title="Editovať"><i class="bi bi-pencil"></i></button>
@@ -1046,6 +1113,7 @@ function openAddPassword() {
   state.editingPwId = null;
   document.getElementById('pwModalTitle').textContent = 'Pridať heslo';
   document.getElementById('pwName').value = '';
+  document.getElementById('pwLogin').value = '';
   document.getElementById('pwValue').value = '';
   document.getElementById('pwEnter').checked = false;
   openModal('modalPassword');
@@ -1058,6 +1126,7 @@ function openEditPassword(id) {
   state.editingPwId = id;
   document.getElementById('pwModalTitle').textContent = 'Editovať heslo';
   document.getElementById('pwName').value = pw.name;
+  document.getElementById('pwLogin').value = pw.login || '';
   document.getElementById('pwValue').value = pw.value;
   document.getElementById('pwEnter').checked = !!pw.enter;
   openModal('modalPassword');
@@ -1065,15 +1134,16 @@ function openEditPassword(id) {
 
 function savePassword() {
   const name = document.getElementById('pwName').value.trim();
+  const login = document.getElementById('pwLogin').value;
   const value = document.getElementById('pwValue').value;
   const enter = document.getElementById('pwEnter').checked;
-  if (!name || !value) { showToast('Vyplň oba polia', 'error'); return; }
+  if (!name || !value) { showToast('Vyplň názov a heslo', 'error'); return; }
 
   if (state.editingPwId) {
     const idx = state.passwords.findIndex(p => p.id === state.editingPwId);
-    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].value = value; state.passwords[idx].enter = enter; }
+    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].login = login; state.passwords[idx].value = value; state.passwords[idx].enter = enter; }
   } else {
-    state.passwords.push({ id: uid(), name, value, enter });
+    state.passwords.push({ id: uid(), name, login, value, enter });
   }
   savePasswordsToStorage();
   renderPasswords();
@@ -1100,6 +1170,99 @@ function confirmDeletePassword() {
   showToast('Heslo vymazané', 'info');
 }
 
+// ── Zoradenie tabuliek podľa abecedy ──
+function sortByName(arr, dir) {
+  const copy = [...arr].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'sk', { sensitivity: 'base' }));
+  return dir === 'desc' ? copy.reverse() : copy;
+}
+function updateSortIcon(btnId, dir) {
+  const icon = document.querySelector(`#${btnId} i`);
+  if (icon) icon.className = dir === 'desc' ? 'bi bi-sort-alpha-up' : 'bi bi-sort-alpha-down';
+}
+function togglePwSort() {
+  state.pwSort = state.pwSort === 'asc' ? 'desc' : 'asc';
+  localStorage.setItem('uak_pw_sort', state.pwSort);
+  renderPasswords();
+}
+function toggleScriptSort() {
+  state.scriptSort = state.scriptSort === 'asc' ? 'desc' : 'asc';
+  localStorage.setItem('uak_script_sort', state.scriptSort);
+  renderScripts();
+}
+
+// ── Prepínač rozloženia klávesnice (SK / EN-US) ──
+function setKbLayout(layout) {
+  state.kbLayout = layout;
+  localStorage.setItem('uak_kb_layout', layout);
+  updateKbSwitchUI();
+}
+function updateKbSwitchUI() {
+  document.querySelectorAll('#kbSwitch .kb-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.layout === state.kbLayout);
+  });
+}
+
+// ── Lokálne premapovanie znakov podľa rozloženia klávesnice cieľového OS ──
+// Appka pošle surový HID (modifikátor+scancode) cez /sendhid; firmware nič
+// neprekladá. Hodnoty sú USB HID usage kódy a modifikátorové bity z firmvéru
+// (LeftShift=0x02, RightAlt/AltGr=0x40). US je autoritatívne z USBKeyDefinitions.h,
+// SK z win_sk-SK.h (base/shift) + slovenského Windows rozloženia KBDSL (AltGr).
+const KB_MOD_SHIFT = 0x02, KB_MOD_ALTGR = 0x40;
+
+const KB_US = {};
+(function() {
+  const L = 'abcdefghijklmnopqrstuvwxyz';
+  for (let i = 0; i < L.length; i++) { const c = 0x04 + i; KB_US[L[i]] = [0, c]; KB_US[L[i].toUpperCase()] = [KB_MOD_SHIFT, c]; }
+  const base = {'1':0x1e,'2':0x1f,'3':0x20,'4':0x21,'5':0x22,'6':0x23,'7':0x24,'8':0x25,'9':0x26,'0':0x27,'-':0x2d,'=':0x2e,'[':0x2f,']':0x30,'\\':0x31,';':0x33,"'":0x34,'`':0x35,',':0x36,'.':0x37,'/':0x38,' ':0x2c};
+  for (const k in base) KB_US[k] = [0, base[k]];
+  const shift = {'!':0x1e,'@':0x1f,'#':0x20,'$':0x21,'%':0x22,'^':0x23,'&':0x24,'*':0x25,'(':0x26,')':0x27,'_':0x2d,'+':0x2e,'{':0x2f,'}':0x30,'|':0x31,':':0x33,'"':0x34,'~':0x35,'<':0x36,'>':0x37,'?':0x38};
+  for (const k in shift) KB_US[k] = [KB_MOD_SHIFT, shift[k]];
+})();
+
+const KB_SK = Object.assign({}, KB_US);
+(function() {
+  KB_SK['z'] = [0, 0x1c]; KB_SK['Z'] = [KB_MOD_SHIFT, 0x1c];   // QWERTZ: prehodené y/z
+  KB_SK['y'] = [0, 0x1d]; KB_SK['Y'] = [KB_MOD_SHIFT, 0x1d];
+  // číslice a symboly cez Shift (win_sk-SK.h)
+  const sh = {'1':0x1e,'2':0x1f,'3':0x20,'4':0x21,'5':0x22,'6':0x23,'7':0x24,'8':0x25,'9':0x26,'0':0x27,'%':0x2d,'/':0x2f,'(':0x30,')':0x31,'"':0x33,'!':0x34,'?':0x36,':':0x37,'_':0x38,'*':0x64};
+  for (const k in sh) KB_SK[k] = [KB_MOD_SHIFT, sh[k]];
+  // base symboly (win_sk-SK.h)
+  const bs = {'+':0x1e,'=':0x2d,';':0x35,'-':0x38,',':0x36,'.':0x37,' ':0x2c};
+  for (const k in bs) KB_SK[k] = [0, bs[k]];
+  // AltGr vrstva (slovenské Windows rozloženie KBDSL)
+  const ag = {'\\':0x14,'|':0x1a,"'":0x13,'$':0x33,'#':0x1b,'&':0x06,'@':0x19,'{':0x05,'}':0x11,'[':0x09,']':0x0a,'<':0x36,'>':0x37,'~':0x1e,'`':0x24};
+  for (const k in ag) KB_SK[k] = [KB_MOD_ALTGR, ag[k]];
+  delete KB_SK['^'];   // na SK je '^' mŕtvy kláves -> spoľahlivo sa nedá poslať
+})();
+
+const KB_TAB = [0, 0x2b], KB_ENTER = [0, 0x28];
+
+function kbMap(layout) { return layout === 'win_sk-SK' ? KB_SK : KB_US; }
+
+// Prevedie text na pole [mod, scancode] dvojíc podľa rozloženia.
+// Vráti aj znaky, ktoré sa v danom rozložení nedajú vyrobiť.
+function textToHid(text, layout) {
+  const map = kbMap(layout);
+  const seq = [], skipped = [];
+  for (const ch of text) {
+    if (map[ch]) seq.push(map[ch]);
+    else skipped.push(ch);
+  }
+  return { seq, skipped };
+}
+
+// Pošle postupnosť HID stlačení jedným volaním /sendhid (žiadny race, poradie
+// drží firmware). Formát keys: "mod:key" hex dvojice oddelené čiarkou.
+async function sendHid(seq) {
+  if (seq.length === 0) return;
+  const keys = seq.map(([mod, key]) =>
+    mod.toString(16).padStart(2, '0') + ':' + key.toString(16).padStart(2, '0')
+  ).join(',');
+  const url = `${state.host}/sendhid?keys=${encodeURIComponent(keys)}`;
+  const res = await http.get({ url, connectTimeout: 5000, readTimeout: 5000, shouldEncodeUrlParams: false });
+  if (!(res.status >= 200 && res.status < 400)) throw new Error('sendhid HTTP ' + res.status);
+}
+
 async function sendPassword(id) {
   const pw = state.passwords.find(p => p.id === id);
   if (!pw) return;
@@ -1116,19 +1279,29 @@ async function sendPassword(id) {
   }
 
   try {
-    // STRINGLN napíše heslo a hneď pridá ENTER (jeden príkaz, žiadny race),
-    // STRING napíše len heslo. Voľba podľa prepínača v nastavení hesla.
-    // shouldEncodeUrlParams:false — URL je už zakódované cez encodeURIComponent.
-    // Bez toho CapacitorHttp query ešte raz prepíše a poškodí špeciálne znaky a medzery.
-    const cmd = (pw.enter ? 'STRINGLN ' : 'STRING ') + pw.value;
-    const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent(cmd)}`;
-    const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, shouldEncodeUrlParams: false });
-    if (res.status >= 200 && res.status < 400) {
-      showFeedback(id, 'success');
-      showToast(`"${pw.name}" odoslané`, 'success');
+    // Znaky premapujeme lokálne podľa zvoleného rozloženia a pošleme ako surový
+    // HID cez /sendhid. Celá postupnosť (login + Tab + heslo + Enter) ide jedným
+    // volaním, takže nehrozí prepísanie ani race.
+    const layout = state.kbLayout;
+    const seq = [];
+    const skipped = [];
+    if (pw.login) {
+      const a = textToHid(pw.login, layout);
+      seq.push(...a.seq, KB_TAB);   // login, potom Tab na pole hesla
+      skipped.push(...a.skipped);
+    }
+    const b = textToHid(pw.value, layout);
+    seq.push(...b.seq);
+    skipped.push(...b.skipped);
+    if (pw.enter) seq.push(KB_ENTER);
+
+    await sendHid(seq);
+
+    showFeedback(id, 'success');
+    if (skipped.length) {
+      showToast('Nepodporované znaky pre toto rozloženie: ' + [...new Set(skipped)].join(' '), 'error');
     } else {
-      showFeedback(id, 'error');
-      showToast('Chyba pri odoslaní', 'error');
+      showToast(`"${pw.name}" odoslané`, 'success');
     }
   } catch(e) {
     showFeedback(id, 'error');
@@ -1236,7 +1409,9 @@ function renderScripts() {
     list.innerHTML = `<div class="empty-state"><i class="bi bi-file-code"></i><p>Žiadne skripty na SD karte.<br>Pripoj UAK a klikni na <i class="bi bi-arrow-clockwise"></i></p></div>`;
     return;
   }
-  list.innerHTML = state.scripts.map(sc => `
+  updateSortIcon('btnSortScript', state.scriptSort);
+
+  list.innerHTML = sortByName(state.scripts, state.scriptSort).map(sc => `
     <div class="list-item script-item" id="scitem-${sc.id}">
       <div class="item-icon"><i class="bi bi-file-earmark-code"></i></div>
       <div class="item-info">
@@ -1431,7 +1606,6 @@ function uploadScripts(event) {
     </div>
   `).join('');
 
-  uploadDebugReset();   // skry prípadný starý debug výpis z predošlého pokusu
   openModal('modalUpload');
   event.target.value = '';
 }
@@ -1456,10 +1630,6 @@ async function startUpload() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>NAHRÁVAM...';
 
-  const dbg = uploadDebugReset();
-  uploadDebugLog(dbg, `Cieľ: ${state.host}/uploadFile`);
-  uploadDebugLog(dbg, `Režim: ${CapacitorHttp ? 'Android (CapacitorHttp fetch)' : 'web (fetch)'}`);
-
   let successCount = 0;
   for (let i = 0; i < filesToUpload.length; i++) {
     const file = filesToUpload[i];
@@ -1476,7 +1646,6 @@ async function startUpload() {
       // Content-Type -> server vracal 404.)
       const formData = new FormData();
       formData.append('file', file, file.name);
-      uploadDebugLog(dbg, `${file.name}: posielam ${file.size} B`);
       const res = await fetch(`${state.host}/uploadFile`, {
         method: 'POST',
         body: formData,
@@ -1489,23 +1658,18 @@ async function startUpload() {
         // catch-all request handler, ktorý pre /uploadFile pošle 404 a prepíše
         // 200 z onFileUpload. Súbor je teda na SD aj pri 404 -> overíme reálne.
         ok = await sdFileExists(file.name);
-        if (ok) uploadDebugLog(dbg, `${file.name}: HTTP ${res.status}, ale súbor je na SD -> OK`);
       }
       if (ok) {
         statusEl.textContent = 'OK';
         statusEl.style.color = 'var(--accent)';
-        if (res.ok) uploadDebugLog(dbg, `${file.name}: OK (HTTP ${res.status})`);
         successCount++;
       } else {
-        const bodyText = await res.text().catch(() => '');
         statusEl.textContent = `CHYBA ${res.status}`;
         statusEl.style.color = 'var(--danger)';
-        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} a súbor nie je na SD — ${bodyText.trim().slice(0, 300) || '(prázdna odpoveď)'}`, true);
       }
     } catch(e) {
       statusEl.textContent = 'CHYBA';
       statusEl.style.color = 'var(--danger)';
-      uploadDebugLog(dbg, `${file.name}: výnimka — ${e && e.message ? e.message : e}`, true);
     }
   }
 
@@ -1515,44 +1679,13 @@ async function startUpload() {
   showToast(`Nahraných ${successCount}/${filesToUpload.length} súborov`, successCount === filesToUpload.length ? 'success' : 'error');
 
   if (successCount === filesToUpload.length) {
-    // Všetko OK — zavri modal. Pri chybe ho necháme otvorený, nech je debug čitateľný.
     setTimeout(() => {
       closeModal('modalUpload');
       loadScriptsFromSD();
     }, 1200);
-  } else {
-    if (successCount > 0) loadScriptsFromSD();
-    uploadDebugLog(dbg, 'Tip: skopíruj tento výpis a pošli ho pri hlásení chyby.');
+  } else if (successCount > 0) {
+    loadScriptsFromSD();
   }
-}
-
-// ── UPLOAD DEBUG VÝPIS ──
-// Na telefóne nie je dostupná konzola, takže chyby uploadu zobrazíme priamo v modale.
-function uploadDebugReset() {
-  let box = document.getElementById('uploadDebug');
-  if (!box) {
-    box = document.createElement('pre');
-    box.id = 'uploadDebug';
-    box.style.cssText = 'display:none;margin-top:12px;padding:10px;max-height:160px;overflow:auto;'
-      + 'background:#000;border:1px solid var(--border);border-radius:var(--radius-sm);'
-      + 'font-family:var(--font-mono);font-size:10px;line-height:1.5;white-space:pre-wrap;'
-      + 'word-break:break-word;color:var(--text-muted);';
-    const listEl = document.getElementById('uploadFileList');
-    listEl.parentNode.insertBefore(box, listEl.nextSibling);
-  }
-  box.textContent = '';
-  box.style.display = 'none';
-  return box;
-}
-
-function uploadDebugLog(box, msg, isError) {
-  if (!box) return;
-  box.style.display = 'block';
-  const line = document.createElement('div');
-  line.textContent = msg;
-  if (isError) line.style.color = 'var(--danger)';
-  box.appendChild(line);
-  box.scrollTop = box.scrollHeight;
 }
 
 function showScriptFeedback(id, type) {
