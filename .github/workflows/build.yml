@@ -227,16 +227,38 @@ jobs:
 
       - name: Use persistent debug keystore
         run: |
-          # Bez tohto runner vygeneruje nový debug.keystore pri každom builde,
-          # takže každý APK je podpísaný iným kľúčom a Android odmietne aktualizáciu
-          # (treba odinštalovať). Tu použijeme stály keystore z repozitára.
-          mkdir -p ~/.android
-          cp keystore/debug.keystore ~/.android/debug.keystore
+          # Stabilný debug podpis. Spoliehať sa na default ~/.android/debug.keystore
+          # nestačí — kde ho AGP hľadá závisí od prostredia (ANDROID_USER_HOME/
+          # ANDROID_SDK_HOME), takže runner aj tak generoval nový kľúč pri každom
+          # builde a Android odmietal aktualizáciu (konflikt podpisov). Kľúč preto
+          # nastavíme EXPLICITNE v app/build.gradle na stály keystore z repozitára.
+          cp keystore/debug.keystore android/app/debug.keystore
+          cat >> android/app/build.gradle << 'EOF'
+
+          android {
+              signingConfigs {
+                  debug {
+                      storeFile file('debug.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+          }
+          EOF
 
       - name: Build APK
         run: |
           cd android
           ./gradlew assembleDebug
+
+      - name: Print signing certificate
+        run: |
+          # Odtlačok musí byť MEDZI BUILDMI ROVNAKÝ — inak Android nedovolí update.
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          echo "=== Podpisový certifikát APK ==="
+          "$ANDROID_SDK_ROOT"/build-tools/*/apksigner verify --print-certs "$APK" 2>/dev/null | grep -i "SHA-256" \
+            || keytool -printcert -jarfile "$APK" 2>/dev/null | grep -i "SHA256"
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
