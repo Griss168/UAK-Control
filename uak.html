@@ -1436,6 +1436,20 @@ function uploadScripts(event) {
   event.target.value = '';
 }
 
+// Overí, či sa súbor (podľa názvu) nachádza v zozname súborov na SD karte.
+// Používa sa na potvrdenie uploadu, keďže firmware vracia 404 aj po úspechu.
+async function sdFileExists(filename) {
+  try {
+    const res = await http.get({ url: `${state.host}/data.json`, connectTimeout: 3000, readTimeout: 3000 });
+    const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    const listing = (data && data.fileListing) || [];
+    const target = filename.toLowerCase();
+    return listing.some(f => String(f).toLowerCase().split('/').pop() === target);
+  } catch(_) {
+    return false;
+  }
+}
+
 async function startUpload() {
   if (!(await ensureConnected())) { showToast('UAK nie je dostupný', 'error'); return; }
   const btn = document.getElementById('btnStartUpload');
@@ -1469,16 +1483,24 @@ async function startUpload() {
         // AbortSignal.timeout nemusí byť v starších WebView -> použijeme len ak existuje
         signal: (AbortSignal && AbortSignal.timeout) ? AbortSignal.timeout(20000) : undefined
       });
-      if (res.ok) {
+      let ok = res.ok;
+      if (!ok) {
+        // Firmware quirk: ESPAsyncWebServer po úspešnom uploade aj tak spustí
+        // catch-all request handler, ktorý pre /uploadFile pošle 404 a prepíše
+        // 200 z onFileUpload. Súbor je teda na SD aj pri 404 -> overíme reálne.
+        ok = await sdFileExists(file.name);
+        if (ok) uploadDebugLog(dbg, `${file.name}: HTTP ${res.status}, ale súbor je na SD -> OK`);
+      }
+      if (ok) {
         statusEl.textContent = 'OK';
         statusEl.style.color = 'var(--accent)';
-        uploadDebugLog(dbg, `${file.name}: OK (HTTP ${res.status})`);
+        if (res.ok) uploadDebugLog(dbg, `${file.name}: OK (HTTP ${res.status})`);
         successCount++;
       } else {
         const bodyText = await res.text().catch(() => '');
         statusEl.textContent = `CHYBA ${res.status}`;
         statusEl.style.color = 'var(--danger)';
-        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} — ${bodyText.trim().slice(0, 300) || '(prázdna odpoveď)'}`, true);
+        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} a súbor nie je na SD — ${bodyText.trim().slice(0, 300) || '(prázdna odpoveď)'}`, true);
       }
     } catch(e) {
       statusEl.textContent = 'CHYBA';
