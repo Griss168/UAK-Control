@@ -1444,7 +1444,7 @@ async function startUpload() {
 
   const dbg = uploadDebugReset();
   uploadDebugLog(dbg, `Cieľ: ${state.host}/uploadFile`);
-  uploadDebugLog(dbg, `Režim: ${CapacitorHttp ? 'Android (manuálny multipart)' : 'web (FormData)'}`);
+  uploadDebugLog(dbg, `Režim: ${CapacitorHttp ? 'Android (CapacitorHttp fetch)' : 'web (fetch)'}`);
 
   let successCount = 0;
   for (let i = 0; i < filesToUpload.length; i++) {
@@ -1454,48 +1454,31 @@ async function startUpload() {
     statusEl.style.color = 'var(--warning)';
 
     try {
-      let res;
-      if (CapacitorHttp) {
-        // Android: CapacitorHttp serializuje FormObjekt nespoľahlivo a ESP
-        // multipart parser to odmietne -> "chyba prenosu". Multipart telo preto
-        // zostavíme ručne a pošleme ako string s explicitným boundary.
-        // (.ds sú textové, takže string telo je bezpečné.)
-        const content = await file.text();
-        const boundary = '----UAKBoundary' + Date.now() + i;
-        const body =
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="file"; filename="${file.name}"\r\n` +
-          `Content-Type: application/octet-stream\r\n\r\n` +
-          content + `\r\n` +
-          `--${boundary}--\r\n`;
-        uploadDebugLog(dbg, `${file.name}: posielam ${body.length} B (obsah ${content.length} B)`);
-        res = await http.post({
-          url: `${state.host}/uploadFile`,
-          headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-          data: body,
-          connectTimeout: 15000,
-          readTimeout: 15000
-        });
-      } else {
-        // Web (prehliadač) — natívne FormData, fetch nastaví boundary sám
-        const formData = new FormData();
-        formData.append('file', file, file.name);
-        res = await http.post({
-          url: `${state.host}/uploadFile`,
-          data: formData,
-          connectTimeout: 15000,
-          readTimeout: 15000
-        });
-      }
-      if (res.status >= 200 && res.status < 300) {
+      // Súbor posielame cez fetch + FormData a Content-Type NENASTAVUJEME.
+      // Keď je CapacitorHttp zapnutý, patchnutý window.fetch konvertuje FormData
+      // natívne a sám vygeneruje korektný multipart boundary, takže ESP
+      // onFileUpload handler správne nabehne. (CapacitorHttp.post(FormData)
+      // FormData neserializuje a ručný multipart string zase prišiel o
+      // Content-Type -> server vracal 404.)
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      uploadDebugLog(dbg, `${file.name}: posielam ${file.size} B`);
+      const res = await fetch(`${state.host}/uploadFile`, {
+        method: 'POST',
+        body: formData,
+        // AbortSignal.timeout nemusí byť v starších WebView -> použijeme len ak existuje
+        signal: (AbortSignal && AbortSignal.timeout) ? AbortSignal.timeout(20000) : undefined
+      });
+      if (res.ok) {
         statusEl.textContent = 'OK';
         statusEl.style.color = 'var(--accent)';
         uploadDebugLog(dbg, `${file.name}: OK (HTTP ${res.status})`);
         successCount++;
       } else {
+        const bodyText = await res.text().catch(() => '');
         statusEl.textContent = `CHYBA ${res.status}`;
         statusEl.style.color = 'var(--danger)';
-        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} — ${describeResponse(res)}`, true);
+        uploadDebugLog(dbg, `${file.name}: HTTP ${res.status} — ${bodyText.trim().slice(0, 300) || '(prázdna odpoveď)'}`, true);
       }
     } catch(e) {
       statusEl.textContent = 'CHYBA';
@@ -1548,16 +1531,6 @@ function uploadDebugLog(box, msg, isError) {
   if (isError) line.style.color = 'var(--danger)';
   box.appendChild(line);
   box.scrollTop = box.scrollHeight;
-}
-
-// Vytiahne čitateľný útržok z odpovede servera (telo + status text) pre debug.
-function describeResponse(res) {
-  let body = res && res.data;
-  if (body == null) body = '';
-  else if (typeof body !== 'string') { try { body = JSON.stringify(body); } catch(_) { body = String(body); } }
-  body = body.trim();
-  if (body.length > 300) body = body.slice(0, 300) + '…';
-  return body || '(prázdna odpoveď)';
 }
 
 function showScriptFeedback(id, type) {
