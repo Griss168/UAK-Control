@@ -239,7 +239,7 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Upload APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: uak-control-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
