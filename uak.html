@@ -642,9 +642,10 @@
   .script-path {
     flex-basis: 100%;
     width: 100%;
-    margin-top: 2px;
+    margin-top: 1px;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 9px;
+    line-height: 1.1;
     color: var(--text-muted);
     word-break: break-all;
   }
@@ -777,8 +778,10 @@ self.addEventListener('fetch', e => {
 </div>
 
 <!-- HOST EDITOR (hidden by default) -->
-<div class="host-row" id="hostRow" style="display:none;">
+<div class="host-row" id="hostRow" style="display:none;flex-wrap:wrap;">
   <input type="text" class="host-input" id="hostInput" placeholder="http://192.168.4.1:8080" />
+  <input type="text" class="host-input" id="wifiSsidInput" placeholder="WiFi SSID dongla (napr. ZenPhone)" autocapitalize="none" autocomplete="off" />
+  <input type="text" class="host-input" id="wifiPassInput" placeholder="WiFi heslo dongla" autocapitalize="none" autocomplete="off" />
   <button class="btn-host-save" onclick="saveHost()">ULOŽIŤ</button>
 </div>
 
@@ -974,6 +977,9 @@ let state = {
   deletingPwId: null,
   deletingScriptId: null,
   checkInterval: null,
+  // WiFi dongla na auto-pripojenie pri štarte (cez natívny WifiNetworkSpecifier)
+  wifiSsid: localStorage.getItem('uak_wifi_ssid') || '',
+  wifiPass: localStorage.getItem('uak_wifi_pass') || '',
   // Smer zoradenia tabuliek (podľa názvu): 'asc' | 'desc'
   pwSort: localStorage.getItem('uak_pw_sort') || 'asc',
   scriptSort: localStorage.getItem('uak_script_sort') || 'asc',
@@ -1007,13 +1013,44 @@ if (window.visualViewport) {
 // ════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hostInput').value = state.host;
+  document.getElementById('wifiSsidInput').value = state.wifiSsid;
+  document.getElementById('wifiPassInput').value = state.wifiPass;
   document.getElementById('hostDisplay').textContent = state.host.replace('http://', '');
   updateKbSwitchUI();
   renderPasswords();
   renderScripts();
-  checkConnection();
+  initConnection();
   state.checkInterval = setInterval(checkConnection, 10000);
 });
+
+// Pri štarte over spojenie; ak dongle nie je dostupný, skús sa aktívne pripojiť
+// na jeho WiFi (natívny WifiNetworkSpecifier, vyžaduje potvrdenie systémovým dialógom).
+async function initConnection() {
+  await checkConnection();
+  if (!state.connected) await autoConnectWifi();
+}
+
+async function autoConnectWifi() {
+  if (state.connected) return;
+  if (!state.wifiSsid) return;                                  // SSID nenastavené
+  // Most sa môže injektovať tesne po načítaní stránky — chvíľu naň počkáme.
+  let bridge = null;
+  for (let i = 0; i < 6; i++) {
+    if (window.AndroidWifi && window.AndroidWifi.connectToDongle) { bridge = window.AndroidWifi; break; }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  if (!bridge) return;                                          // len natívna appka (Android)
+  try {
+    bridge.connectToDongle(state.wifiSsid, state.wifiPass || '');
+    showToast('Pripájam na WiFi „' + state.wifiSsid + '"…', 'info');
+    // Počkaj na potvrdenie dialógu + pripojenie, priebežne over dostupnosť.
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      await checkConnection();
+      if (state.connected) { showToast('Pripojené k UAK', 'success'); return; }
+    }
+  } catch(e) {}
+}
 
 // ════════════════════════════════
 // CONNECTION
@@ -1055,10 +1092,15 @@ function saveHost() {
   if (!val) return;
   state.host = val;
   localStorage.setItem('uak_host', val);
+  // WiFi dongla (pre auto-pripojenie pri štarte)
+  state.wifiSsid = document.getElementById('wifiSsidInput').value.trim();
+  state.wifiPass = document.getElementById('wifiPassInput').value;
+  localStorage.setItem('uak_wifi_ssid', state.wifiSsid);
+  localStorage.setItem('uak_wifi_pass', state.wifiPass);
   document.getElementById('hostDisplay').textContent = val.replace('http://','');
   document.getElementById('hostRow').style.display = 'none';
   checkConnection();
-  showToast('Host uložený', 'info');
+  showToast('Nastavenia uložené', 'info');
 }
 
 // ════════════════════════════════

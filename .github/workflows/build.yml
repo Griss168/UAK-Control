@@ -73,7 +73,9 @@ jobs:
           # ktore v MainActivity nizsie pripajaju proces na WiFi siet
           # (UAK AP nema internet, takze Android by inak komunikaciu posielal
           # cez mobilne data, kde 192.168.4.1 nie je dostupne).
-          sed -i 's/<\/manifest>/    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" \/>\n    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" \/>\n<\/manifest>/' android/app/src/main/AndroidManifest.xml
+          # ACCESS_WIFI_STATE + CHANGE_WIFI_STATE su potrebne pre WifiNetworkSpecifier
+          # (aktivne pripojenie na WiFi dongla cez window.AndroidWifi.connectToDongle).
+          sed -i 's/<\/manifest>/    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" \/>\n    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" \/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" \/>\n    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" \/>\n<\/manifest>/' android/app/src/main/AndroidManifest.xml
 
       - name: Create network security config
         run: |
@@ -108,17 +110,74 @@ jobs:
           import android.net.Network;
           import android.net.NetworkCapabilities;
           import android.net.NetworkRequest;
+          import android.net.wifi.WifiNetworkSpecifier;
+          import android.webkit.JavascriptInterface;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import com.getcapacitor.BridgeActivity;
           public class MainActivity extends BridgeActivity {
+            private ConnectivityManager.NetworkCallback wifiConnectCallback;
             @Override
             public void onCreate(Bundle savedInstanceState) {
               super.onCreate(savedInstanceState);
               WebView webView = getBridge().getWebView();
               WebSettings settings = webView.getSettings();
               settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+              webView.addJavascriptInterface(new WifiBridge(), "AndroidWifi");
               bindToWifi();
+            }
+
+            // Most pre web aplikaciu: window.AndroidWifi.connectToDongle(ssid, pass)
+            public class WifiBridge {
+              @JavascriptInterface
+              public void connectToDongle(final String ssid, final String pass) {
+                runOnUiThread(new Runnable() {
+                  @Override
+                  public void run() { connectToDongleWifi(ssid, pass); }
+                });
+              }
+            }
+
+            // Aktivne pripojenie na konkretnu WiFi siet dongla (Android 10+). System
+            // ukaze potvrdzovaci dialog; po potvrdeni naviaze proces appky na tuto siet
+            // (aj bez internetu), takze 192.168.4.1 je dosiahnutelne aj pri datach.
+            private void connectToDongleWifi(String ssid, String pass) {
+              try {
+                if (ssid == null || ssid.length() == 0) return;
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+                final ConnectivityManager cm =
+                    (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm == null) return;
+                WifiNetworkSpecifier.Builder sb = new WifiNetworkSpecifier.Builder().setSsid(ssid);
+                if (pass != null && pass.length() > 0) {
+                  sb.setWpa2Passphrase(pass);
+                }
+                NetworkRequest req = new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .setNetworkSpecifier(sb.build())
+                    .build();
+                if (wifiConnectCallback != null) {
+                  try { cm.unregisterNetworkCallback(wifiConnectCallback); } catch (Exception ignored) {}
+                }
+                wifiConnectCallback = new ConnectivityManager.NetworkCallback() {
+                  @Override
+                  public void onAvailable(Network network) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      cm.bindProcessToNetwork(network);
+                    }
+                  }
+                  @Override
+                  public void onLost(Network network) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                      cm.bindProcessToNetwork(null);
+                    }
+                  }
+                };
+                cm.requestNetwork(req, wifiConnectCallback);
+              } catch (Exception e) {
+                // best-effort
+              }
             }
 
             // Ked ma telefon zapnute mobilne data a WiFi (UAK AP) nema internet,
