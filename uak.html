@@ -637,6 +637,17 @@
 
   /* ── SCRIPTS TAB SPECIFIC ── */
   .script-item .item-icon { color: var(--warning); }
+  /* Cesta k súboru na samostatnom riadku pod akčnými tlačidlami (nech ich neprekrýva) */
+  .script-item { flex-wrap: wrap; }
+  .script-path {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    word-break: break-all;
+  }
   .btn-run {
     padding: 6px 14px;
     background: var(--accent-dim);
@@ -1420,7 +1431,6 @@ function renderScripts() {
       <div class="item-icon"><i class="bi bi-file-earmark-code"></i></div>
       <div class="item-info">
         <div class="item-name">${escHtml(sc.name)}</div>
-        <div class="item-meta">${escHtml(sc.filename)}</div>
       </div>
       <div class="item-actions">
         <button class="btn-action primary" onclick="makeAutorun('${sc.id}')" title="Nastaviť ako autorun.ds (kópia do rootu SD)">A</button>
@@ -1428,6 +1438,7 @@ function renderScripts() {
         <button class="btn-run" onclick="runScript('${sc.id}')">RUN</button>
         <button class="btn-action danger" onclick="openDeleteScript('${sc.id}')" title="Vymazať zo SD"><i class="bi bi-trash"></i></button>
       </div>
+      <div class="script-path">${escHtml(sc.filename)}</div>
       <div class="item-feedback success" id="sfb-ok-${sc.id}"><i class="bi bi-play-fill"></i> SPUSTENÉ</div>
       <div class="item-feedback error" id="sfb-err-${sc.id}"><i class="bi bi-x-lg"></i> CHYBA</div>
     </div>
