@@ -1423,6 +1423,7 @@ function renderScripts() {
         <div class="item-meta">${escHtml(sc.filename)}</div>
       </div>
       <div class="item-actions">
+        <button class="btn-action primary" onclick="makeAutorun('${sc.id}')" title="Nastaviť ako autorun.ds (kópia do rootu SD)">A</button>
         <button class="btn-action primary" onclick="downloadScript('${sc.id}')" title="Zálohovať do telefónu"><i class="bi bi-download"></i></button>
         <button class="btn-run" onclick="runScript('${sc.id}')">RUN</button>
         <button class="btn-action danger" onclick="openDeleteScript('${sc.id}')" title="Vymazať zo SD"><i class="bi bi-trash"></i></button>
@@ -1506,11 +1507,34 @@ async function confirmDeleteScript() {
   showToast('Skript vymazaný', 'info');
 }
 
+// ── Pomocné: serializované rawinput (počká, kým zariadenie príkaz dokončí) ──
+function uakSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function getPayloadStatus() {
+  try {
+    const res = await http.get({ url: `${state.host}/data.json`, connectTimeout: 2000, readTimeout: 2000 });
+    const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
+    return (data && data.status) || '';
+  } catch(_) { return ''; }
+}
+async function rawInputAndWait(cmd) {
+  const url = `${state.host}/rawinput?rawCommand=${encodeURIComponent(cmd)}`;
+  const res = await http.get({ url, connectTimeout: 3000, readTimeout: 3000, shouldEncodeUrlParams: false });
+  if (!(res.status >= 200 && res.status < 400)) throw new Error('rawinput HTTP ' + res.status);
+  for (let i = 0; i < 40; i++) {
+    if (await getPayloadStatus() !== 'Running') return;
+    await uakSleep(150);
+  }
+}
+
 async function runScript(id) {
   const sc = state.scripts.find(s => s.id === id);
   if (!sc) return;
   if (!(await ensureConnected())) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
   try {
+    // Najprv nastav rozloženie klávesnice cieľového PC, aby DuckyScript STRING
+    // príkazy v skripte mapovali znaky správne (device mapuje podľa KEYBOARD_LAYOUT).
+    // Počkáme, kým sa príkaz dokončí, až potom spustíme skript (inak by ho prepísal).
+    await rawInputAndWait('KEYBOARD_LAYOUT ' + state.kbLayout);
     // OPRAVA: params objekt nefunguje spoľahlivo — parameter musí byť priamo v URL.
     // shouldEncodeUrlParams:false — URL je už zakódované, nech ho CapacitorHttp neprepisuje.
     const url = `${state.host}/runfile?filename=${encodeURIComponent(sc.filename)}`;
@@ -1526,6 +1550,44 @@ async function runScript(id) {
   } catch(e) {
     showScriptFeedback(id, 'error');
     showToast('Nedostupný', 'error');
+  }
+}
+
+// Duplikuje vybraný skript do rootu SD karty ako autorun.ds (spustí sa po štarte).
+async function makeAutorun(id) {
+  const sc = state.scripts.find(s => s.id === id);
+  if (!sc) return;
+  if (!(await ensureConnected())) { showScriptFeedback(id, 'error'); showToast('UAK nie je dostupný', 'error'); return; }
+  try {
+    // 1) Načítaj obsah vybraného skriptu zo SD.
+    const dlUrl = `${state.host}/download?filename=${encodeURIComponent(sc.filename)}`;
+    const res = await http.get({ url: dlUrl, connectTimeout: 5000, readTimeout: 10000, responseType: 'text', shouldEncodeUrlParams: false });
+    if (res.status < 200 || res.status >= 300) { showScriptFeedback(id, 'error'); showToast('Skript sa nedá načítať', 'error'); return; }
+    const content = typeof res.data === 'string' ? res.data : (res.data == null ? '' : String(res.data));
+
+    // 2) Nahraj ho ako autorun.ds do rootu SD. Firmware zapisuje /<filename>, takže
+    //    názov "autorun.ds" (bez cesty) skončí v roote. Posielame cez patchnutý fetch
+    //    + FormData (rovnako ako bežný upload), Content-Type nenastavujeme.
+    const formData = new FormData();
+    formData.append('file', new Blob([content], { type: 'application/octet-stream' }), 'autorun.ds');
+    const up = await fetch(`${state.host}/uploadFile`, {
+      method: 'POST',
+      body: formData,
+      signal: (AbortSignal && AbortSignal.timeout) ? AbortSignal.timeout(20000) : undefined
+    });
+
+    // Firmware vracia po uploade 404 aj pri úspechu -> overíme reálne cez listing.
+    const ok = up.ok || await sdFileExists('autorun.ds');
+    if (ok) {
+      showScriptFeedback(id, 'success');
+      showToast(`"${sc.name}" nastavený ako autorun.ds`, 'success');
+    } else {
+      showScriptFeedback(id, 'error');
+      showToast('Chyba pri vytváraní autorun.ds', 'error');
+    }
+  } catch(e) {
+    showScriptFeedback(id, 'error');
+    showToast('Chyba pri vytváraní autorun.ds', 'error');
   }
 }
 
