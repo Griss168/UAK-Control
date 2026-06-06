@@ -494,16 +494,16 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     overflow: hidden;
+    cursor: pointer;
+    user-select: none;
   }
   .kb-opt {
-    border: none;
-    background: transparent;
     color: var(--text-muted);
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
     padding: 6px 14px;
-    cursor: pointer;
+    pointer-events: none;
   }
   .kb-opt.active {
     background: var(--accent);
@@ -797,9 +797,9 @@ self.addEventListener('fetch', e => {
   <!-- Keyboard layout switcher -->
   <div class="kb-switch-row">
     <span class="kb-switch-label"><i class="bi bi-keyboard me-1"></i>Rozloženie klávesnice</span>
-    <div class="kb-switch" id="kbSwitch">
-      <button class="kb-opt" data-layout="win_en-US" onclick="setKbLayout('win_en-US')">EN (US)</button>
-      <button class="kb-opt" data-layout="win_sk-SK" onclick="setKbLayout('win_sk-SK')">SK</button>
+    <div class="kb-switch" id="kbSwitch" onclick="toggleKbLayout()" role="button" tabindex="0" title="Prepnúť rozloženie">
+      <span class="kb-opt" data-layout="win_en-US">EN</span>
+      <span class="kb-opt" data-layout="win_sk-SK">SK</span>
     </div>
   </div>
 
@@ -1195,6 +1195,10 @@ function setKbLayout(layout) {
   state.kbLayout = layout;
   localStorage.setItem('uak_kb_layout', layout);
   updateKbSwitchUI();
+}
+// Klik kdekoľvek na prepínač prepne na druhé rozloženie.
+function toggleKbLayout() {
+  setKbLayout(state.kbLayout === 'win_sk-SK' ? 'win_en-US' : 'win_sk-SK');
 }
 function updateKbSwitchUI() {
   document.querySelectorAll('#kbSwitch .kb-opt').forEach(b => {
