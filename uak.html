@@ -642,7 +642,7 @@
   .script-path {
     flex-basis: 100%;
     width: 100%;
-    margin-top: 8px;
+    margin-top: 2px;
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--text-muted);
@@ -1459,11 +1459,9 @@ async function loadScriptsFromSD() {
   try {
     const res = await http.get({ url: `${state.host}/data.json`, connectTimeout: 3000, readTimeout: 3000 });
     const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
-    // Všetky .ds súbory okrem /autorun.ds v roote
+    // Všetky .ds súbory (vrátane root /autorun.ds, nech sa dá zobraziť aj vymazať)
     const allFiles = data.fileListing || [];
-    const files = allFiles.filter(f =>
-      f.toLowerCase().endsWith('.ds') && f.toLowerCase() !== '/autorun.ds'
-    );
+    const files = allFiles.filter(f => f.toLowerCase().endsWith('.ds'));
 
     state.scripts = files.map(f => {
       const filename = f;
