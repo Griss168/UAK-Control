@@ -284,6 +284,13 @@
     color: var(--text-muted);
     margin-top: 2px;
   }
+  .item-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 
   .item-actions {
     display: flex;
@@ -904,6 +911,8 @@ self.addEventListener('fetch', e => {
         <span class="slider"></span>
       </label>
     </div>
+    <label class="form-label-custom">Poznámky (voliteľné)</label>
+    <textarea class="form-control-custom" id="pwNote" rows="3" placeholder="Poznámky k tomuto heslu..." style="resize:vertical;"></textarea>
     <button class="btn-sheet-primary" onclick="savePassword()">ULOŽIŤ</button>
     <button class="btn-sheet-secondary" onclick="closeModal('modalPassword')">ZRUŠIŤ</button>
   </div>
@@ -1151,6 +1160,7 @@ function renderPasswords() {
       <div class="item-info">
         <div class="item-name">${escHtml(pw.name)}</div>
         <div class="item-meta">${pw.login ? escHtml(pw.login) + ' <i class="bi bi-arrow-bar-right" title="Login + Tab"></i> ' : ''}••••••••${pw.enter ? ' <i class="bi bi-arrow-return-left" title="Zakončené Enterom"></i>' : ''}</div>
+        ${pw.note ? `<div class="item-note">${escHtml(pw.note)}</div>` : ''}
       </div>
       <div class="item-actions" onclick="event.stopPropagation()">
         <button class="btn-action primary" onclick="openEditPassword('${pw.id}')" title="Editovať"><i class="bi bi-pencil"></i></button>
@@ -1169,6 +1179,7 @@ function openAddPassword() {
   document.getElementById('pwLogin').value = '';
   document.getElementById('pwValue').value = '';
   document.getElementById('pwEnter').checked = false;
+  document.getElementById('pwNote').value = '';
   openModal('modalPassword');
   setTimeout(() => document.getElementById('pwName').focus(), 300);
 }
@@ -1182,6 +1193,7 @@ function openEditPassword(id) {
   document.getElementById('pwLogin').value = pw.login || '';
   document.getElementById('pwValue').value = pw.value;
   document.getElementById('pwEnter').checked = !!pw.enter;
+  document.getElementById('pwNote').value = pw.note || '';
   openModal('modalPassword');
 }
 
@@ -1190,13 +1202,14 @@ function savePassword() {
   const login = document.getElementById('pwLogin').value;
   const value = document.getElementById('pwValue').value;
   const enter = document.getElementById('pwEnter').checked;
+  const note = document.getElementById('pwNote').value.trim();
   if (!name || !value) { showToast('Vyplň názov a heslo', 'error'); return; }
 
   if (state.editingPwId) {
     const idx = state.passwords.findIndex(p => p.id === state.editingPwId);
-    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].login = login; state.passwords[idx].value = value; state.passwords[idx].enter = enter; }
+    if (idx >= 0) { state.passwords[idx].name = name; state.passwords[idx].login = login; state.passwords[idx].value = value; state.passwords[idx].enter = enter; state.passwords[idx].note = note; }
   } else {
-    state.passwords.push({ id: uid(), name, login, value, enter });
+    state.passwords.push({ id: uid(), name, login, value, enter, note });
   }
   savePasswordsToStorage();
   renderPasswords();
