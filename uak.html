@@ -1032,6 +1032,14 @@ document.addEventListener('DOMContentLoaded', () => {
   state.checkInterval = setInterval(checkConnection, 10000);
 });
 
+// Capacitor si WebView pri prechode na pozadie ponecháva, takže DOMContentLoaded
+// sa po návrate (home tlačidlo, zamknutie, odpojenie/pripojenie donglu) už znovu
+// nespustí. Pri každom návrate do popredia over spojenie a ak je mŕtve, znova
+// spusti auto-pripojenie na WiFi donglu.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') initConnection();
+});
+
 // Pri štarte over spojenie; ak dongle nie je dostupný, skús sa aktívne pripojiť
 // na jeho WiFi (natívny WifiNetworkSpecifier, vyžaduje potvrdenie systémovým dialógom).
 async function initConnection() {
@@ -1042,14 +1050,21 @@ async function initConnection() {
 async function autoConnectWifi() {
   if (state.connected) return;
   if (!state.wifiSsid) return;                                  // SSID nenastavené
-  // Most sa môže injektovať tesne po načítaní stránky — chvíľu naň počkáme.
-  let bridge = null;
-  for (let i = 0; i < 6; i++) {
-    if (window.AndroidWifi && window.AndroidWifi.connectToDongle) { bridge = window.AndroidWifi; break; }
-    await new Promise(r => setTimeout(r, 300));
+  // Ak už jeden pokus beží (napr. z návratu do popredia), nespúšťaj natívny WiFi
+  // bind druhýkrát — len počkaj na výsledok prebiehajúceho pokusu.
+  if (state.autoConnecting) {
+    while (state.autoConnecting) await new Promise(r => setTimeout(r, 300));
+    return;
   }
-  if (!bridge) return;                                          // len natívna appka (Android)
+  state.autoConnecting = true;
   try {
+    // Most sa môže injektovať tesne po načítaní stránky — chvíľu naň počkáme.
+    let bridge = null;
+    for (let i = 0; i < 6; i++) {
+      if (window.AndroidWifi && window.AndroidWifi.connectToDongle) { bridge = window.AndroidWifi; break; }
+      await new Promise(r => setTimeout(r, 300));
+    }
+    if (!bridge) return;                                        // len natívna appka (Android)
     bridge.connectToDongle(state.wifiSsid, state.wifiPass || '');
     showToast('Pripájam na WiFi „' + state.wifiSsid + '"…', 'info');
     // Počkaj na potvrdenie dialógu + pripojenie, priebežne over dostupnosť.
@@ -1058,7 +1073,10 @@ async function autoConnectWifi() {
       await checkConnection();
       if (state.connected) { showToast('Pripojené k UAK', 'success'); return; }
     }
-  } catch(e) {}
+  } catch(e) {
+  } finally {
+    state.autoConnecting = false;
+  }
 }
 
 // ════════════════════════════════
@@ -1088,6 +1106,11 @@ async function checkConnection() {
 async function ensureConnected() {
   if (state.connected) return true;
   await checkConnection();
+  if (state.connected) return true;
+  // Spojenie nie je naživo — skús ho aktívne obnoviť (natívny WiFi bind na dongle)
+  // a až potom prípadne zlyhaj. Tým sa príkaz vykoná aj po výpadku WiFi bez
+  // nutnosti manuálneho reštartu appky.
+  await autoConnectWifi();
   return state.connected;
 }
 
