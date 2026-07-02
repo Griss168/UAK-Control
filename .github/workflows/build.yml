@@ -114,6 +114,10 @@ jobs:
           import android.webkit.JavascriptInterface;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
+          import androidx.biometric.BiometricManager;
+          import androidx.biometric.BiometricPrompt;
+          import androidx.core.content.ContextCompat;
+          import java.util.concurrent.Executor;
           import com.getcapacitor.BridgeActivity;
           public class MainActivity extends BridgeActivity {
             private ConnectivityManager.NetworkCallback wifiConnectCallback;
@@ -124,6 +128,7 @@ jobs:
               WebSettings settings = webView.getSettings();
               settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
               webView.addJavascriptInterface(new WifiBridge(), "AndroidWifi");
+              webView.addJavascriptInterface(new BiometricBridge(), "AndroidBiometric");
               bindToWifi();
             }
 
@@ -136,6 +141,75 @@ jobs:
                   public void run() { connectToDongleWifi(ssid, pass); }
                 });
               }
+            }
+
+            // Most pre biometricke odomknutie appky: window.AndroidBiometric.authenticate()
+            public class BiometricBridge {
+              @JavascriptInterface
+              public void authenticate() {
+                runOnUiThread(new Runnable() {
+                  @Override
+                  public void run() { showBiometricPrompt(); }
+                });
+              }
+            }
+
+            // Zobrazi systemovy BiometricPrompt (odtlacok; na API 30+ fallback na PIN/gesto
+            // telefonu, na starsich negativne tlacidlo). Vysledok posle do JS cez
+            // window.__onBioResult(true/false). Ak sa neda overit (ziadny zamok/odtlacok),
+            // odomkne (neni co ani cim chranit) -> pouzivatela nezablokujeme.
+            private boolean bioShowing = false;
+            private void showBiometricPrompt() {
+              if (bioShowing) return;
+              try {
+                BiometricPrompt.PromptInfo.Builder pib = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("UAK Control")
+                    .setSubtitle("Odomkni odtlackom prsta");
+                int allowed;
+                if (Build.VERSION.SDK_INT >= 30) {
+                  allowed = BiometricManager.Authenticators.BIOMETRIC_STRONG
+                          | BiometricManager.Authenticators.DEVICE_CREDENTIAL;
+                  pib.setAllowedAuthenticators(allowed);
+                } else {
+                  allowed = BiometricManager.Authenticators.BIOMETRIC_WEAK;
+                  pib.setAllowedAuthenticators(allowed);
+                  pib.setNegativeButtonText("Zrusit");
+                }
+                BiometricManager bm = BiometricManager.from(this);
+                if (bm.canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
+                  bioResult(true);
+                  return;
+                }
+                Executor exec = ContextCompat.getMainExecutor(this);
+                BiometricPrompt prompt = new BiometricPrompt(this, exec,
+                  new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                      bioShowing = false;
+                      bioResult(true);
+                    }
+                    @Override
+                    public void onAuthenticationError(int errorCode, CharSequence errString) {
+                      bioShowing = false;
+                      bioResult(false);
+                    }
+                  });
+                bioShowing = true;
+                prompt.authenticate(pib.build());
+              } catch (Exception e) {
+                bioShowing = false;
+                bioResult(true);
+              }
+            }
+
+            private void bioResult(final boolean ok) {
+              final WebView webView = getBridge().getWebView();
+              webView.post(new Runnable() {
+                @Override
+                public void run() {
+                  webView.evaluateJavascript("window.__onBioResult && window.__onBioResult(" + ok + ");", null);
+                }
+              });
             }
 
             // Aktivne pripojenie na konkretnu WiFi siet dongla (Android 10+). System
@@ -216,6 +290,18 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Add biometric dependency
+        run: |
+          # androidx.biometric poskytuje BiometricPrompt pouzity v MainActivity
+          # (biometricky zamok appky). Gradle zluci viacero top-level dependencies
+          # blokov, takze staci pripojit dalsi.
+          cat >> android/app/build.gradle << 'EOF'
+
+          dependencies {
+              implementation 'androidx.biometric:biometric:1.1.0'
+          }
+          EOF
 
       - name: Set app icons
         run: |

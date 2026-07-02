@@ -54,6 +54,62 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* ── BIOMETRICKÝ ZÁMOK ── */
+  /* Zobrazený hneď (display:flex), aby sa obsah appky neukázal pred overením.
+     JS ho skryje po úspešnom odtlačku, resp. mimo natívnej appky (web). */
+  .lock-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    background: var(--bg-primary);
+    padding: 32px;
+    text-align: center;
+  }
+  .lock-overlay .lock-icon {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    font-size: 42px;
+    color: var(--accent);
+  }
+  .lock-overlay .lock-title {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--text-secondary);
+    letter-spacing: .4px;
+  }
+  .lock-overlay .lock-app {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+  }
+  .lock-overlay .lock-btn {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 12px 24px;
+    border-radius: 999px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
   /* ── STATUS BAR ── */
   .status-bar {
     position: sticky;
@@ -769,6 +825,14 @@ self.addEventListener('fetch', e => {
 </head>
 <body>
 
+<!-- BIOMETRICKÝ ZÁMOK (úroveň A – zámok UI) -->
+<div class="lock-overlay" id="lockOverlay">
+  <div class="lock-icon"><i class="bi bi-fingerprint"></i></div>
+  <div class="lock-title">Odomkni odtlačkom prsta</div>
+  <div class="lock-app">UAK CONTROL</div>
+  <button class="lock-btn" id="lockRetryBtn" onclick="requestUnlock()"><i class="bi bi-fingerprint"></i> Skúsiť znova</button>
+</div>
+
 <!-- STATUS BAR -->
 <div class="status-bar">
   <span class="app-title"><i class="bi bi-usb-symbol me-1"></i>UAK Control</span>
@@ -1021,6 +1085,7 @@ if (window.visualViewport) {
 // INIT
 // ════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+  requestUnlock();                       // biometrický zámok hneď pri štarte
   document.getElementById('hostInput').value = state.host;
   document.getElementById('wifiSsidInput').value = state.wifiSsid;
   document.getElementById('wifiPassInput').value = state.wifiPass;
@@ -1034,11 +1099,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Capacitor si WebView pri prechode na pozadie ponecháva, takže DOMContentLoaded
 // sa po návrate (home tlačidlo, zamknutie, odpojenie/pripojenie donglu) už znovu
-// nespustí. Pri každom návrate do popredia over spojenie a ak je mŕtve, znova
-// spusti auto-pripojenie na WiFi donglu.
+// nespustí. Preto pri odchode na pozadie appku znova zamkneme (obsah sa skryje aj
+// v prehľade nedávnych appiek) a pri návrate do popredia vyžiadame odtlačok a
+// súčasne obnovíme WiFi spojenie s donglom.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') initConnection();
+  if (document.visibilityState === 'hidden') {
+    showLock();
+  } else {
+    requestUnlock();
+    initConnection();
+  }
 });
+
+// ════════════════════════════════
+// BIOMETRICKÝ ZÁMOK (úroveň A – zámok UI)
+// ════════════════════════════════
+// Natívna vrstva (MainActivity.BiometricBridge) vyvolá systémový BiometricPrompt
+// a výsledok pošle späť cez window.__onBioResult(true/false). Mimo natívnej appky
+// (bežná web/PWA verzia, kde most window.AndroidBiometric neexistuje) zámok
+// nepoužívame — odomkneme automaticky, aby sa appka dala normálne používať.
+let bioUnlocked = false;                   // appka je momentálne odomknutá?
+let bioInProgress = false;                 // beží systémový dialóg?
+
+function showLock() {
+  bioUnlocked = false;
+  const o = document.getElementById('lockOverlay');
+  if (o) o.style.display = 'flex';
+}
+function hideLock() {
+  bioUnlocked = true;
+  const o = document.getElementById('lockOverlay');
+  if (o) o.style.display = 'none';
+}
+
+// Callback z natívnej vrstvy.
+window.__onBioResult = function(ok) {
+  bioInProgress = false;
+  if (ok) {
+    hideLock();
+  } else {
+    // Neúspech / zrušenie — necháme zamknuté a ponúkneme opätovný pokus.
+    const b = document.getElementById('lockRetryBtn');
+    if (b) b.style.display = 'inline-flex';
+  }
+};
+
+async function requestUnlock() {
+  if (bioUnlocked || bioInProgress) return; // už odomknuté alebo dialóg beží
+  bioInProgress = true;
+  // Most sa injektuje tesne po načítaní stránky — chvíľu naň počkáme.
+  let bridge = null;
+  for (let i = 0; i < 8; i++) {
+    if (window.AndroidBiometric && window.AndroidBiometric.authenticate) { bridge = window.AndroidBiometric; break; }
+    await new Promise(r => setTimeout(r, 150));
+  }
+  if (!bridge) { bioInProgress = false; hideLock(); return; }   // web/PWA — nezamykaj
+  const b = document.getElementById('lockRetryBtn');
+  if (b) b.style.display = 'none';
+  showLock();
+  try {
+    bridge.authenticate();                 // systémový dialóg; výsledok príde do __onBioResult
+  } catch(e) {
+    bioInProgress = false;
+    hideLock();                            // ak natívna časť zlyhá, neblokuj používateľa
+  }
+}
 
 // Pri štarte over spojenie; ak dongle nie je dostupný, skús sa aktívne pripojiť
 // na jeho WiFi (natívny WifiNetworkSpecifier, vyžaduje potvrdenie systémovým dialógom).
